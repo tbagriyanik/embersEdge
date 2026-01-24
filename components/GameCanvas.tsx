@@ -89,7 +89,7 @@ export const GameCanvas: React.FC<Props> = ({ gameState }) => {
         canvas.height / 2 - (pS.y + (TILE_HEIGHT * zoom) / 2) + cameraOffsetY
       );
 
-      const renderRange = 16;
+      const renderRange = 14;
       const startX = Math.max(0, Math.floor(gameState.playerPos.x - renderRange));
       const endX = Math.min(WORLD_SIZE, Math.ceil(gameState.playerPos.x + renderRange));
       const startY = Math.max(0, Math.floor(gameState.playerPos.y - renderRange));
@@ -108,43 +108,44 @@ export const GameCanvas: React.FC<Props> = ({ gameState }) => {
             const waveOffset = Math.sin((now / 1000) + (x * 0.5) + (y * 0.5)) * 4 * zoom;
             ctx.beginPath();
             ctx.moveTo(s.x + 10 * zoom, s.y + 30 * zoom + waveOffset);
-            ctx.bezierCurveTo(s.x + 20 * zoom, s.y + 20 * zoom + waveOffset, s.x + 40 * zoom, s.y + 40 * zoom + waveOffset, s.x + 54 * zoom, s.y + 30 * zoom + waveOffset);
+            ctx.bezierCurveTo(
+                s.x + 20 * zoom, s.y + 20 * zoom + waveOffset,
+                s.x + 40 * zoom, s.y + 40 * zoom + waveOffset,
+                s.x + 54 * zoom, s.y + 30 * zoom + waveOffset
+            );
             ctx.stroke();
           }
         }
       }
 
-      // Draw structures (Roads, Bridges) first for correct layering
-      const bgEntities = gameState.entities.filter(e => ['road', 'bridge'].includes(e.type));
-      bgEntities.forEach(ent => {
-        const s = toScreen(ent.x, ent.y);
-        ctx.save();
-        ctx.translate(s.x + (TILE_WIDTH * zoom) / 2, s.y + (TILE_HEIGHT * zoom) / 2);
-        ctx.scale(zoom, zoom);
-        ctx.font = `${48}px serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(ent.type === 'bridge' ? '🌉' : '🛣️', 0, 0);
-        ctx.restore();
-      });
-
       const entitiesToDraw = [...gameState.entities, { id: 'p', type: 'player', x: gameState.playerPos.x, y: gameState.playerPos.y, health: gameState.playerStats.health, maxHealth: gameState.playerStats.maxHealth } as any]
-        .filter(ent => !['road', 'bridge'].includes(ent.type) && Math.sqrt((ent.x - gameState.playerPos.x)**2 + (ent.y - gameState.playerPos.y)**2) < renderRange + 2)
+        .filter(ent => Math.sqrt((ent.x - gameState.playerPos.x)**2 + (ent.y - gameState.playerPos.y)**2) < renderRange + 2)
         .sort((a,b) => a.y - b.y);
 
       entitiesToDraw.forEach(ent => {
         const prevHealth = lastHealths.current.get(ent.id);
-        if (prevHealth !== undefined && ent.health < prevHealth) { spawnParticles(ent.x, ent.y); hitJolts.current.set(ent.id, 0.4); }
+        if (prevHealth !== undefined && ent.health < prevHealth) {
+          spawnParticles(ent.x, ent.y);
+          hitJolts.current.set(ent.id, 0.4); 
+        }
         lastHealths.current.set(ent.id, ent.health);
 
         const s = toScreen(ent.x, ent.y);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
         
+        let targetScale = 1;
+        
+        let currentScale = visualScales.current.get(ent.id) ?? targetScale;
+        currentScale += (targetScale - currentScale) * 0.1; 
+        visualScales.current.set(ent.id, currentScale);
+
         let jolt = hitJolts.current.get(ent.id) ?? 0;
         jolt *= 0.85;
-        hitJolts.current.set(ent.id, jolt < 0.01 ? 0 : jolt);
-        const finalScale = (visualScales.current.get(ent.id) ?? 1) * (1 - jolt);
+        if (jolt < 0.01) jolt = 0;
+        hitJolts.current.set(ent.id, jolt);
+
+        const finalScale = currentScale * (1 - jolt); 
 
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
@@ -153,79 +154,148 @@ export const GameCanvas: React.FC<Props> = ({ gameState }) => {
 
         if (ent.type === 'player') {
           const stats = gameState.playerStats;
+          const isWalking = stats.isWalking;
+          const facing = stats.facing;
+          const hasAxe = stats.equippedItemId === 'axe';
           const interactAge = now - stats.lastInteractTime;
           const isSwinging = interactAge < 300;
           const swingPhase = isSwinging ? Math.sin((interactAge / 300) * Math.PI) : 0;
-          const walkCycle = stats.isWalking ? Math.sin(now / 100) : 0;
+          const walkCycle = isWalking ? Math.sin(now / 100) : 0;
+          const armSwing = walkCycle * 6 * zoom;
 
           ctx.save();
           ctx.translate(centerX, centerY);
           ctx.scale(finalScale, finalScale);
 
           ctx.fillStyle = '#1c1917';
-          ctx.fillRect(-8*zoom, 8*zoom + (stats.isWalking ? walkCycle*4*zoom : 0), 6*zoom, 10*zoom);
-          ctx.fillRect(2*zoom, 8*zoom + (stats.isWalking ? -walkCycle*4*zoom : 0), 6*zoom, 10*zoom);
+          ctx.fillRect(-8*zoom, 8*zoom + (isWalking ? walkCycle*4*zoom : 0), 6*zoom, 10*zoom);
+          ctx.fillRect(2*zoom, 8*zoom + (isWalking ? -walkCycle*4*zoom : 0), 6*zoom, 10*zoom);
 
           ctx.fillStyle = stats.character.outfitColor;
           ctx.fillRect(-10*zoom, -10*zoom, 20*zoom, 20*zoom);
 
           ctx.fillStyle = '#fde68a';
-          ctx.fillRect(-14*zoom, -6*zoom, 4*zoom, 12*zoom); // Arm Left
-          
+          ctx.save();
+          ctx.translate(-12*zoom, -6*zoom);
+          if (isWalking) ctx.rotate(-armSwing * 0.1);
+          ctx.fillRect(-2*zoom, 0, 4*zoom, 12*zoom);
+          ctx.restore();
+
           ctx.save();
           ctx.translate(12*zoom, -6*zoom);
           if (isSwinging) ctx.rotate(-Math.PI/2 - swingPhase * 1.5);
-          ctx.fillRect(-2*zoom, 0, 4*zoom, 12*zoom); // Arm Right
+          else if (isWalking) ctx.rotate(armSwing * 0.1);
+          ctx.fillRect(-2*zoom, 0, 4*zoom, 12*zoom);
           
-          if (stats.equippedItemId) {
+          if (hasAxe) {
+            ctx.save();
+            ctx.translate(0, 10 * zoom); // Eli tuttuğu yer
+            
+            // Ahşap Sap
+            ctx.fillStyle = '#4e342e';
+            ctx.fillRect(-1 * zoom, 0, 2 * zoom, 18 * zoom);
+            
+            // Demir Başlık (Savrulan Kısım)
+            ctx.translate(0, 18 * zoom);
+            // Savrulma ivmesi için vuruş anında başlığı hafifçe öne döndür
+            ctx.rotate(isSwinging ? swingPhase * 0.7 : 0);
+            
+            // Ana Demir Kütlesi
             ctx.fillStyle = '#90a4ae';
-            ctx.fillRect(-2*zoom, 10*zoom, 4*zoom, 20*zoom); // Simple weapon/tool render
+            ctx.beginPath();
+            ctx.moveTo(-1 * zoom, 0);
+            ctx.lineTo(8 * zoom, -4 * zoom);
+            ctx.lineTo(11 * zoom, 4 * zoom);
+            ctx.lineTo(-1 * zoom, 8 * zoom);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Keskin Kenar Parlaması
+            ctx.strokeStyle = '#eceff1';
+            ctx.lineWidth = 1 * zoom;
+            ctx.beginPath();
+            ctx.moveTo(8 * zoom, -4 * zoom);
+            ctx.lineTo(11 * zoom, 4 * zoom);
+            ctx.stroke();
+            
+            ctx.restore();
           }
           ctx.restore();
 
           ctx.fillStyle = '#fde68a';
-          ctx.beginPath(); ctx.arc(0, -20*zoom, 10*zoom, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath();
+          ctx.arc(0, -20*zoom, 10*zoom, 0, Math.PI*2);
+          ctx.fill();
+
+          ctx.fillStyle = 'black';
+          const eyeSize = 1.5 * zoom;
+          let eyeOffsetX = 0, eyeOffsetY = 0;
+          if (facing === 'se') { eyeOffsetX = 3*zoom; eyeOffsetY = 1*zoom; }
+          else if (facing === 'sw') { eyeOffsetX = -3*zoom; eyeOffsetY = 1*zoom; }
+          else if (facing === 'ne') { eyeOffsetX = 3*zoom; eyeOffsetY = -2*zoom; }
+          else if (facing === 'nw') { eyeOffsetX = -3*zoom; eyeOffsetY = -2*zoom; }
+          ctx.beginPath();
+          ctx.arc(eyeOffsetX - 3*zoom, -21*zoom + eyeOffsetY, eyeSize, 0, Math.PI*2);
+          ctx.arc(eyeOffsetX + 3*zoom, -21*zoom + eyeOffsetY, eyeSize, 0, Math.PI*2);
+          ctx.fill();
           ctx.restore();
+
         } else {
           const icons: any = { 
-            tree_oak: '🌳', tree_pine: '🌲', tree_palm: '🌴', rock_standard: '🪨', rock_iron: '🌑',
-            bush_berry: '🌿', bush_flower: '🌺', bush_dry: '🍂', well: '⛲', deer: '🦌', rabbit: '🐇', scorpion: '🦂', bear: '🐻',
-            campfire: '🔥', tent: '⛺', hut: '🏠', workbench: '⚒️', stone_wall: '🧱', watchtower: '🏰', castle_gate: '🏰'
+            tree_oak: '🌳', tree_pine: '🌲', tree_palm: '🌴',
+            rock_standard: '🪨', rock_iron: '🌑',
+            bush_berry: '🌿', bush_flower: '🌺', bush_dry: '🍂',
+            well: '⛲', deer: '🦌', rabbit: '🐇', scorpion: '🦂', bear: '🐻',
+            campfire: '🔥', tent: '⛺', hut: '🏠', workbench: '⚒️'
           };
+          
+          const isAnimal = ['deer', 'rabbit', 'scorpion', 'bear'].includes(ent.type);
+          const bounce = isAnimal ? Math.abs(Math.sin(now / 150)) * 1 * zoom : 0; 
+          const isFlipping = ent.targetX !== undefined && ent.targetX < ent.x;
+
           ctx.save();
-          ctx.translate(centerX, centerY + 10*zoom);
+          ctx.translate(centerX, centerY + 10*zoom - bounce);
+          if (isFlipping) ctx.scale(-1, 1);
           ctx.scale(finalScale, finalScale);
           ctx.font = `${48*zoom}px serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
+          ctx.fillStyle = 'white'; 
           ctx.fillText(icons[ent.type] || '❓', 0, 0);
           ctx.restore();
         }
       });
 
-      // Draw Projectiles
-      gameState.projectiles.forEach(p => {
-        const s = toScreen(p.x, p.y);
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(s.x + (TILE_WIDTH * zoom) / 2, s.y + (TILE_HEIGHT * zoom) / 2, 3*zoom, 0, Math.PI*2);
-        ctx.fill();
-      });
-
       particles.current = particles.current.filter(p => {
-        p.life -= 0.02; p.x += p.vx; p.y += p.vy; p.vy += 0.005;
+        p.life -= 0.02;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.005;
+        
         const ps = toScreen(p.x, p.y);
-        ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+        const opacity = Math.max(0, p.life / p.maxLife);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = opacity;
         ctx.fillRect(ps.x, ps.y, p.size * zoom, p.size * zoom);
         ctx.globalAlpha = 1.0;
+
         return p.life > 0;
       });
 
+      if (now % 2000 < 50) {
+          const activeIds = new Set(entitiesToDraw.map(e => e.id));
+          for (const key of visualScales.current.keys()) if (!activeIds.has(key)) visualScales.current.delete(key);
+          for (const key of lastHealths.current.keys()) if (!activeIds.has(key)) lastHealths.current.delete(key);
+          for (const key of hitJolts.current.keys()) if (!activeIds.has(key)) hitJolts.current.delete(key);
+      }
+
       ctx.restore();
+
       const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width*0.9);
       grad.addColorStop(0, 'rgba(0,0,0,0)');
       grad.addColorStop(1, `rgba(0,0,0,${0.5 + ambientAlpha*0.4})`);
-      ctx.fillStyle = grad; ctx.fillRect(0,0, canvas.width, canvas.height);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0, canvas.width, canvas.height);
 
       frameId = requestAnimationFrame(render);
     };
