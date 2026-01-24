@@ -38,6 +38,7 @@ const App: React.FC = () => {
     playerStats: INITIAL_STATS,
     inventory: [],
     entities: [],
+    projectiles: [], // Added missing projectiles array
     time: 600,
     isDay: true,
     gameStarted: false,
