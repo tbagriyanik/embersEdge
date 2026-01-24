@@ -27,9 +27,9 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, isNearWorkbe
             <h2 className="text-2xl font-black text-amber-500 uppercase tracking-tighter flex items-center gap-3">
                <span className="text-3xl">⚒️</span> {t('crafting')}
             </h2>
-            <span className="text-[10px] uppercase font-black tracking-widest text-white/30">{isNearWorkbench ? 'USING WORKBENCH' : 'BASIC CRAFTING'}</span>
+            <span className="text-[11px] uppercase font-black tracking-widest text-white/40 mt-1">{isNearWorkbench ? 'USING WORKBENCH' : 'BASIC CRAFTING'}</span>
           </div>
-          <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all">✕</button>
+          <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all text-lg">✕</button>
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[70vh] grid gap-4 grid-cols-1 sm:grid-cols-2">
@@ -39,21 +39,21 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, isNearWorkbe
             const canCraft = !levelLocked && !workbenchLocked && checkIngredients(recipe);
 
             return (
-              <div key={recipe.id} className={`p-4 rounded-3xl border transition-all ${canCraft ? 'bg-white/5 border-amber-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
-                <div className="flex items-center gap-4 mb-4">
+              <div key={recipe.id} className={`p-5 rounded-3xl border transition-all ${canCraft ? 'bg-white/5 border-amber-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
+                <div className="flex items-center gap-4 mb-5">
                   <div className="w-16 h-16 bg-black/40 rounded-2xl flex items-center justify-center text-4xl shadow-inner">{recipe.output.icon}</div>
                   <div className="flex-1">
-                    <h3 className="text-sm font-black text-white uppercase">{recipe.name}</h3>
-                    <p className="text-[10px] text-white/40 leading-tight">{recipe.output.description}</p>
+                    <h3 className="text-[13px] font-black text-white uppercase tracking-tight">{recipe.name}</h3>
+                    <p className="text-[11px] text-white/50 leading-tight mt-1 font-medium">{recipe.output.description}</p>
                   </div>
                 </div>
 
-                <div className="space-y-2 mb-4">
+                <div className="space-y-2.5 mb-5">
                   {Object.entries(recipe.ingredients).map(([id, qty]) => {
                     const inv = inventory.find(i => i.id === id);
                     const has = inv ? inv.quantity : 0;
                     return (
-                      <div key={id} className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest">
+                      <div key={id} className="flex justify-between items-center text-[11px] font-bold uppercase tracking-wider">
                         <span className="text-white/40">{id}</span>
                         <span className={has >= (qty as number) ? 'text-emerald-500' : 'text-red-500'}>{has}/{qty}</span>
                       </div>
@@ -63,7 +63,7 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, isNearWorkbe
 
                 <button 
                   disabled={!canCraft} onClick={() => onCraft(recipe.id)}
-                  className={`w-full py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${canCraft ? 'bg-amber-500 text-stone-900 shadow-lg active:scale-95' : 'bg-white/5 text-white/20'}`}
+                  className={`w-full py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all ${canCraft ? 'bg-amber-500 text-stone-900 shadow-lg active:scale-95' : 'bg-white/5 text-white/30'}`}
                 >
                   {levelLocked ? `LV. ${recipe.levelRequired}` : workbenchLocked ? 'NEED BENCH' : 'CRAFT'}
                 </button>

@@ -8,9 +8,23 @@ interface Props {
   gameState: GameState;
 }
 
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  color: string;
+}
+
 export const GameCanvas: React.FC<Props> = ({ gameState }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const visualScales = useRef<Map<string, number>>(new Map());
+  const hitJolts = useRef<Map<string, number>>(new Map());
+  const lastHealths = useRef<Map<string, number>>(new Map());
+  const particles = useRef<Particle[]>([]);
   
   const zoom = gameState.viewConfig.zoom;
   const rotation = gameState.viewConfig.rotation;
@@ -30,6 +44,24 @@ export const GameCanvas: React.FC<Props> = ({ gameState }) => {
     const th = TILE_HEIGHT * zoom;
     return { x: tx * tw, y: ty * th };
   }, [zoom, getTransformedCoords]);
+
+  const spawnParticles = (x: number, y: number) => {
+    const count = 6 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.5 + Math.random() * 1.5;
+      particles.current.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed * 0.03,
+        vy: Math.sin(angle) * speed * 0.03 - 0.03,
+        life: 0.8,
+        maxLife: 0.4 + Math.random() * 0.4,
+        size: 1 + Math.random() * 2,
+        color: Math.random() > 0.5 ? '#78350f' : '#451a03' 
+      });
+    }
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -57,7 +89,7 @@ export const GameCanvas: React.FC<Props> = ({ gameState }) => {
         canvas.height / 2 - (pS.y + (TILE_HEIGHT * zoom) / 2) + cameraOffsetY
       );
 
-      const renderRange = 12;
+      const renderRange = 16;
       const startX = Math.max(0, Math.floor(gameState.playerPos.x - renderRange));
       const endX = Math.min(WORLD_SIZE, Math.ceil(gameState.playerPos.x + renderRange));
       const startY = Math.max(0, Math.floor(gameState.playerPos.y - renderRange));
@@ -69,142 +101,131 @@ export const GameCanvas: React.FC<Props> = ({ gameState }) => {
           const tile = getTileType(x, y, gameState.playerStats.level);
           ctx.fillStyle = tile === 'grass' ? '#166534' : (tile === 'sand' ? '#eab308' : (tile === 'water' ? '#1e40af' : (tile === 'snow_tile' ? '#f8fafc' : '#b45309')));
           ctx.fillRect(s.x, s.y, TILE_WIDTH * zoom + 0.5, TILE_HEIGHT * zoom + 0.5);
+
+          if (tile === 'water') {
+            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+            ctx.lineWidth = 1 * zoom;
+            const waveOffset = Math.sin((now / 1000) + (x * 0.5) + (y * 0.5)) * 4 * zoom;
+            ctx.beginPath();
+            ctx.moveTo(s.x + 10 * zoom, s.y + 30 * zoom + waveOffset);
+            ctx.bezierCurveTo(s.x + 20 * zoom, s.y + 20 * zoom + waveOffset, s.x + 40 * zoom, s.y + 40 * zoom + waveOffset, s.x + 54 * zoom, s.y + 30 * zoom + waveOffset);
+            ctx.stroke();
+          }
         }
       }
 
-      const sorted = [...gameState.entities, { id: 'p', type: 'player', x: gameState.playerPos.x, y: gameState.playerPos.y, health: gameState.playerStats.health, maxHealth: gameState.playerStats.maxHealth } as any]
-        .filter(ent => Math.sqrt((ent.x - gameState.playerPos.x)**2 + (ent.y - gameState.playerPos.y)**2) < renderRange + 2)
+      // Draw structures (Roads, Bridges) first for correct layering
+      const bgEntities = gameState.entities.filter(e => ['road', 'bridge'].includes(e.type));
+      bgEntities.forEach(ent => {
+        const s = toScreen(ent.x, ent.y);
+        ctx.save();
+        ctx.translate(s.x + (TILE_WIDTH * zoom) / 2, s.y + (TILE_HEIGHT * zoom) / 2);
+        ctx.scale(zoom, zoom);
+        ctx.font = `${48}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(ent.type === 'bridge' ? '🌉' : '🛣️', 0, 0);
+        ctx.restore();
+      });
+
+      const entitiesToDraw = [...gameState.entities, { id: 'p', type: 'player', x: gameState.playerPos.x, y: gameState.playerPos.y, health: gameState.playerStats.health, maxHealth: gameState.playerStats.maxHealth } as any]
+        .filter(ent => !['road', 'bridge'].includes(ent.type) && Math.sqrt((ent.x - gameState.playerPos.x)**2 + (ent.y - gameState.playerPos.y)**2) < renderRange + 2)
         .sort((a,b) => a.y - b.y);
 
-      sorted.forEach(ent => {
+      entitiesToDraw.forEach(ent => {
+        const prevHealth = lastHealths.current.get(ent.id);
+        if (prevHealth !== undefined && ent.health < prevHealth) { spawnParticles(ent.x, ent.y); hitJolts.current.set(ent.id, 0.4); }
+        lastHealths.current.set(ent.id, ent.health);
+
         const s = toScreen(ent.x, ent.y);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
         
-        let targetScale = (ent.type === 'player' || ent.type === 'well' || ent.type === 'workbench' || ent.type === 'campfire') 
-          ? 1 
-          : Math.max(0.2, ent.health / ent.maxHealth);
-        
-        let currentScale = visualScales.current.get(ent.id) ?? targetScale;
-        currentScale += (targetScale - currentScale) * 0.15; 
-        visualScales.current.set(ent.id, currentScale);
+        let jolt = hitJolts.current.get(ent.id) ?? 0;
+        jolt *= 0.85;
+        hitJolts.current.set(ent.id, jolt < 0.01 ? 0 : jolt);
+        const finalScale = (visualScales.current.get(ent.id) ?? 1) * (1 - jolt);
 
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
-        ctx.ellipse(centerX, centerY + 18*zoom, 12*zoom * currentScale, 6*zoom * currentScale, 0, 0, Math.PI*2);
+        ctx.ellipse(centerX, centerY + 18*zoom, 12*zoom * finalScale, 6*zoom * finalScale, 0, 0, Math.PI*2);
         ctx.fill();
 
         if (ent.type === 'player') {
           const stats = gameState.playerStats;
-          const isWalking = stats.isWalking;
-          const facing = stats.facing;
-          const hasAxe = stats.equippedItemId === 'axe';
           const interactAge = now - stats.lastInteractTime;
           const isSwinging = interactAge < 300;
           const swingPhase = isSwinging ? Math.sin((interactAge / 300) * Math.PI) : 0;
+          const walkCycle = stats.isWalking ? Math.sin(now / 100) : 0;
 
-          const walkCycle = isWalking ? Math.sin(now / 100) : 0;
-          const legSwing = walkCycle * 8 * zoom;
-          const armSwing = walkCycle * 6 * zoom;
+          ctx.save();
+          ctx.translate(centerX, centerY);
+          ctx.scale(finalScale, finalScale);
 
-          // Drawing Legs
-          ctx.fillStyle = '#1c1917'; // Leg color (pants/dark)
-          ctx.fillRect(centerX - 8*zoom, centerY + 8*zoom + (isWalking ? walkCycle*4*zoom : 0), 6*zoom, 10*zoom); // Left leg
-          ctx.fillRect(centerX + 2*zoom, centerY + 8*zoom + (isWalking ? -walkCycle*4*zoom : 0), 6*zoom, 10*zoom); // Right leg
+          ctx.fillStyle = '#1c1917';
+          ctx.fillRect(-8*zoom, 8*zoom + (stats.isWalking ? walkCycle*4*zoom : 0), 6*zoom, 10*zoom);
+          ctx.fillRect(2*zoom, 8*zoom + (stats.isWalking ? -walkCycle*4*zoom : 0), 6*zoom, 10*zoom);
 
-          // Drawing Body
           ctx.fillStyle = stats.character.outfitColor;
-          ctx.fillRect(centerX - 10*zoom, centerY - 10*zoom, 20*zoom, 20*zoom);
+          ctx.fillRect(-10*zoom, -10*zoom, 20*zoom, 20*zoom);
 
-          // Drawing Arms
-          ctx.fillStyle = '#fde68a'; // Skin color
-          // Left Arm
-          ctx.save();
-          ctx.translate(centerX - 12*zoom, centerY - 6*zoom);
-          if (isWalking) ctx.rotate(-armSwing * 0.1);
-          ctx.fillRect(-2*zoom, 0, 4*zoom, 12*zoom);
-          ctx.restore();
-
-          // Right Arm (Tool Arm)
-          ctx.save();
-          ctx.translate(centerX + 12*zoom, centerY - 6*zoom);
-          if (isSwinging) {
-            ctx.rotate(-Math.PI/2 - swingPhase * 1.5);
-          } else if (isWalking) {
-            ctx.rotate(armSwing * 0.1);
-          }
-          ctx.fillRect(-2*zoom, 0, 4*zoom, 12*zoom);
-
-          // Draw Axe in sync with arm
-          if (hasAxe) {
-            ctx.save();
-            ctx.translate(0, 10*zoom);
-            ctx.font = `${24*zoom}px serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('🪓', 4*zoom, 4*zoom);
-            ctx.restore();
-          }
-          ctx.restore();
-
-          // Drawing Head
           ctx.fillStyle = '#fde68a';
-          ctx.beginPath();
-          ctx.arc(centerX, centerY - 20*zoom, 10*zoom, 0, Math.PI*2);
-          ctx.fill();
+          ctx.fillRect(-14*zoom, -6*zoom, 4*zoom, 12*zoom); // Arm Left
+          
+          ctx.save();
+          ctx.translate(12*zoom, -6*zoom);
+          if (isSwinging) ctx.rotate(-Math.PI/2 - swingPhase * 1.5);
+          ctx.fillRect(-2*zoom, 0, 4*zoom, 12*zoom); // Arm Right
+          
+          if (stats.equippedItemId) {
+            ctx.fillStyle = '#90a4ae';
+            ctx.fillRect(-2*zoom, 10*zoom, 4*zoom, 20*zoom); // Simple weapon/tool render
+          }
+          ctx.restore();
 
-          // Eyes based on facing
-          ctx.fillStyle = 'black';
-          const eyeSize = 1.5 * zoom;
-          let eyeOffsetX = 0, eyeOffsetY = 0;
-          if (facing === 'se') { eyeOffsetX = 3*zoom; eyeOffsetY = 1*zoom; }
-          else if (facing === 'sw') { eyeOffsetX = -3*zoom; eyeOffsetY = 1*zoom; }
-          else if (facing === 'ne') { eyeOffsetX = 3*zoom; eyeOffsetY = -2*zoom; }
-          else if (facing === 'nw') { eyeOffsetX = -3*zoom; eyeOffsetY = -2*zoom; }
-
-          ctx.beginPath();
-          ctx.arc(centerX + eyeOffsetX - 3*zoom, centerY - 21*zoom + eyeOffsetY, eyeSize, 0, Math.PI*2);
-          ctx.arc(centerX + eyeOffsetX + 3*zoom, centerY - 21*zoom + eyeOffsetY, eyeSize, 0, Math.PI*2);
-          ctx.fill();
-
+          ctx.fillStyle = '#fde68a';
+          ctx.beginPath(); ctx.arc(0, -20*zoom, 10*zoom, 0, Math.PI*2); ctx.fill();
+          ctx.restore();
         } else {
           const icons: any = { 
-            tree: '🌲', rock: '🪨', bush: '🌿', well: '⛲', 
-            deer: '🦌', rabbit: '🐇', scorpion: '🦂', bear: '🐻',
-            campfire: '🔥', tent: '⛺', hut: '🏠', workbench: '⚒️'
+            tree_oak: '🌳', tree_pine: '🌲', tree_palm: '🌴', rock_standard: '🪨', rock_iron: '🌑',
+            bush_berry: '🌿', bush_flower: '🌺', bush_dry: '🍂', well: '⛲', deer: '🦌', rabbit: '🐇', scorpion: '🦂', bear: '🐻',
+            campfire: '🔥', tent: '⛺', hut: '🏠', workbench: '⚒️', stone_wall: '🧱', watchtower: '🏰', castle_gate: '🏰'
           };
-          
-          const isAnimal = ['deer', 'rabbit', 'scorpion', 'bear'].includes(ent.type);
-          const bounce = isAnimal ? Math.abs(Math.sin(now / 150)) * 1 * zoom : 0; 
-          const isFlipping = ent.targetX !== undefined && ent.targetX < ent.x;
-
           ctx.save();
-          ctx.translate(centerX, centerY + 10*zoom - bounce);
-          if (isFlipping) ctx.scale(-1, 1);
-          ctx.scale(currentScale, currentScale);
+          ctx.translate(centerX, centerY + 10*zoom);
+          ctx.scale(finalScale, finalScale);
           ctx.font = `${48*zoom}px serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
-          ctx.fillStyle = 'white'; 
           ctx.fillText(icons[ent.type] || '❓', 0, 0);
           ctx.restore();
         }
       });
 
-      if (now % 1000 < 20) {
-          const activeIds = new Set(sorted.map(e => e.id));
-          for (const key of visualScales.current.keys()) {
-              if (!activeIds.has(key)) visualScales.current.delete(key);
-          }
-      }
+      // Draw Projectiles
+      gameState.projectiles.forEach(p => {
+        const s = toScreen(p.x, p.y);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(s.x + (TILE_WIDTH * zoom) / 2, s.y + (TILE_HEIGHT * zoom) / 2, 3*zoom, 0, Math.PI*2);
+        ctx.fill();
+      });
+
+      particles.current = particles.current.filter(p => {
+        p.life -= 0.02; p.x += p.vx; p.y += p.vy; p.vy += 0.005;
+        const ps = toScreen(p.x, p.y);
+        ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+        ctx.fillRect(ps.x, ps.y, p.size * zoom, p.size * zoom);
+        ctx.globalAlpha = 1.0;
+        return p.life > 0;
+      });
 
       ctx.restore();
-
       const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width*0.9);
       grad.addColorStop(0, 'rgba(0,0,0,0)');
       grad.addColorStop(1, `rgba(0,0,0,${0.5 + ambientAlpha*0.4})`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0,0, canvas.width, canvas.height);
+      ctx.fillStyle = grad; ctx.fillRect(0,0, canvas.width, canvas.height);
 
       frameId = requestAnimationFrame(render);
     };

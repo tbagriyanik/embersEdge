@@ -41,32 +41,32 @@ export const MainMenu: React.FC<Props> = ({ onStart, settings, onUpdateSettings,
       </div>
 
       {/* Keyboard Shortcuts Summary Guide */}
-      <div className="absolute bottom-8 right-8 z-30 hidden md:flex flex-col gap-3 p-6 bg-stone-900/40 backdrop-blur-2xl border border-white/5 rounded-3xl animate-in fade-in slide-in-from-right-8 duration-1000 delay-500 shadow-2xl">
-         <h3 className="text-[10px] font-black tracking-[0.2em] text-amber-500 uppercase mb-1">Controls / Kontroller</h3>
-         <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-            <div className="flex items-center gap-3">
-               <kbd className="px-2 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10 min-w-[32px] text-center">WASD</kbd>
-               <span className="text-[10px] font-bold text-white/50 uppercase">Move</span>
+      <div className="absolute bottom-8 right-8 z-30 hidden md:flex flex-col gap-4 p-6 bg-stone-900/40 backdrop-blur-2xl border border-white/5 rounded-3xl animate-in fade-in slide-in-from-right-8 duration-1000 delay-500 shadow-2xl">
+         <h3 className="text-[11px] font-black tracking-[0.2em] text-amber-500 uppercase mb-1">Controls / Kontroller</h3>
+         <div className="grid grid-cols-2 gap-x-10 gap-y-3">
+            <div className="flex items-center gap-4">
+               <kbd className="px-2 py-1.5 bg-white/10 rounded-lg text-[11px] font-black border border-white/10 min-w-[40px] text-center">WASD</kbd>
+               <span className="text-[11px] font-bold text-white/50 uppercase tracking-tight">Move</span>
             </div>
-            <div className="flex items-center gap-3">
-               <kbd className="px-2 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10 min-w-[32px] text-center">E</kbd>
-               <span className="text-[10px] font-bold text-white/50 uppercase">Action</span>
+            <div className="flex items-center gap-4">
+               <kbd className="px-2 py-1.5 bg-white/10 rounded-lg text-[11px] font-black border border-white/10 min-w-[40px] text-center">E</kbd>
+               <span className="text-[11px] font-bold text-white/50 uppercase tracking-tight">Action</span>
             </div>
-            <div className="flex items-center gap-3">
-               <kbd className="px-2 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10 min-w-[32px] text-center">F</kbd>
-               <span className="text-[10px] font-bold text-white/50 uppercase">Inventory</span>
+            <div className="flex items-center gap-4">
+               <kbd className="px-2 py-1.5 bg-white/10 rounded-lg text-[11px] font-black border border-white/10 min-w-[40px] text-center">F</kbd>
+               <span className="text-[11px] font-bold text-white/50 uppercase tracking-tight">Inv</span>
             </div>
-            <div className="flex items-center gap-3">
-               <kbd className="px-2 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10 min-w-[32px] text-center">C</kbd>
-               <span className="text-[10px] font-bold text-white/50 uppercase">Craft</span>
+            <div className="flex items-center gap-4">
+               <kbd className="px-2 py-1.5 bg-white/10 rounded-lg text-[11px] font-black border border-white/10 min-w-[40px] text-center">C</kbd>
+               <span className="text-[11px] font-bold text-white/50 uppercase tracking-tight">Craft</span>
             </div>
-            <div className="flex items-center gap-3">
-               <kbd className="px-2 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10 min-w-[32px] text-center">1-5</kbd>
-               <span className="text-[10px] font-bold text-white/50 uppercase">Quick Use</span>
+            <div className="flex items-center gap-4">
+               <kbd className="px-2 py-1.5 bg-white/10 rounded-lg text-[11px] font-black border border-white/10 min-w-[40px] text-center">1-5</kbd>
+               <span className="text-[11px] font-bold text-white/50 uppercase tracking-tight">Quick</span>
             </div>
-            <div className="flex items-center gap-3">
-               <kbd className="px-2 py-1 bg-white/10 rounded-lg text-[10px] font-black border border-white/10 min-w-[32px] text-center">ESC</kbd>
-               <span className="text-[10px] font-bold text-white/50 uppercase">Exit</span>
+            <div className="flex items-center gap-4">
+               <kbd className="px-2 py-1.5 bg-white/10 rounded-lg text-[11px] font-black border border-white/10 min-w-[40px] text-center">ESC</kbd>
+               <span className="text-[11px] font-bold text-white/50 uppercase tracking-tight">Exit</span>
             </div>
          </div>
       </div>
@@ -75,7 +75,7 @@ export const MainMenu: React.FC<Props> = ({ onStart, settings, onUpdateSettings,
         {!showSettings ? (
           <>
             <div className="flex flex-col items-center text-center">
-              <span className="text-amber-500 font-black tracking-[0.5em] text-xs mb-2 opacity-50 animate-in slide-in-from-top-4 duration-700 uppercase">Survive the Wilderness</span>
+              <span className="text-amber-500 font-black tracking-[0.5em] text-[12px] mb-3 opacity-60 animate-in slide-in-from-top-4 duration-700 uppercase">Survive the Wilderness</span>
               <h1 className="text-6xl sm:text-8xl font-black tracking-tighter text-white drop-shadow-[0_0_40px_rgba(245,158,11,0.2)] animate-in zoom-in-95 duration-1000">
                 EMBER'S <span className="text-amber-500 text-glow">EDGE</span>
               </h1>
@@ -94,47 +94,47 @@ export const MainMenu: React.FC<Props> = ({ onStart, settings, onUpdateSettings,
               <button 
                 onClick={() => { SoundManager.playUI('click'); setShowSettings(true); }}
                 onMouseEnter={() => SoundManager.playUI('hover')}
-                className="py-4 bg-white/5 border border-white/10 rounded-2xl font-black text-white/80 uppercase tracking-widest text-xs hover:bg-white/10 transition-all active:scale-95"
+                className="py-4 bg-white/5 border border-white/10 rounded-2xl font-black text-white/80 uppercase tracking-widest text-[11px] hover:bg-white/10 transition-all active:scale-95"
               >
                 {t('settings')}
               </button>
             </div>
           </>
         ) : (
-          <div className="w-full bg-stone-900/60 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-white/10 animate-in zoom-in-95 duration-500">
+          <div className="w-full bg-stone-900/60 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-white/10 animate-in zoom-in-95 duration-500 shadow-2xl">
              <h2 className="text-3xl font-black mb-8 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2>
              <div className="space-y-6">
-                <div className="flex flex-col gap-2">
-                   <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">{t('language')}</span>
-                   <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-3">
+                   <span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('language')}</span>
+                   <div className="grid grid-cols-2 gap-3">
                       {(['en', 'tr'] as Language[]).map(l => (
                         <button 
                           key={l} 
                           onClick={() => onUpdateSettings({...settings, language: l})} 
-                          className={`py-3 rounded-xl font-black text-xs uppercase border transition-all ${settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/40'}`}
+                          className={`py-3.5 rounded-xl font-black text-[11px] uppercase border transition-all ${settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}
                         >
                           {l === 'en' ? 'English' : 'Türkçe'}
                         </button>
                       ))}
                    </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                   <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">{t('gender')}</span>
-                   <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-3">
+                   <span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('gender')}</span>
+                   <div className="grid grid-cols-2 gap-3">
                       {(['male', 'female'] as Gender[]).map(g => (
-                        <button key={g} onClick={() => onUpdatePlayerStats({...playerStats, character: {...playerStats.character, gender: g}})} className={`py-3 rounded-xl font-black text-xs uppercase border transition-all ${playerStats.character.gender === g ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/40'}`}>{t(g)}</button>
+                        <button key={g} onClick={() => onUpdatePlayerStats({...playerStats, character: {...playerStats.character, gender: g}})} className={`py-3.5 rounded-xl font-black text-[11px] uppercase border transition-all ${playerStats.character.gender === g ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{t(g)}</button>
                       ))}
                    </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                   <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">{t('outfit')}</span>
+                <div className="flex flex-col gap-3">
+                   <span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('outfit')}</span>
                    <div className="flex gap-4 items-center">
-                      <div className="w-12 h-12 rounded-full border-2 border-white/20" style={{ backgroundColor: playerStats.character.outfitColor }} />
-                      <input type="color" value={playerStats.character.outfitColor} onChange={e => onUpdatePlayerStats({...playerStats, character: {...playerStats.character, outfitColor: e.target.value}})} className="flex-1 h-10 bg-transparent cursor-pointer rounded-lg overflow-hidden border border-white/10" />
+                      <div className="w-12 h-12 rounded-full border-2 border-white/20 shadow-lg" style={{ backgroundColor: playerStats.character.outfitColor }} />
+                      <input type="color" value={playerStats.character.outfitColor} onChange={e => onUpdatePlayerStats({...playerStats, character: {...playerStats.character, outfitColor: e.target.value}})} className="flex-1 h-12 bg-transparent cursor-pointer rounded-xl overflow-hidden border border-white/10" />
                    </div>
                 </div>
              </div>
-             <button onClick={() => setShowSettings(false)} className="w-full py-4 mt-8 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-xs hover:bg-amber-500 transition-colors">{t('back')}</button>
+             <button onClick={() => setShowSettings(false)} className="w-full py-4 mt-10 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-[11px] hover:bg-amber-500 transition-colors shadow-lg active:scale-95">{t('back')}</button>
           </div>
         )}
       </div>

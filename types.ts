@@ -1,5 +1,5 @@
 
-export type ResourceType = 'wood' | 'stone' | 'berry' | 'water' | 'meat';
+export type ResourceType = 'wood' | 'stone' | 'berry' | 'water' | 'meat' | 'iron';
 export type WeatherType = 'clear' | 'rain' | 'fog' | 'snow';
 export type TileType = 'grass' | 'sand' | 'water' | 'snow_tile' | 'desert_tile';
 export type FacingDirection = 'se' | 'sw' | 'ne' | 'nw';
@@ -15,7 +15,7 @@ export interface WeatherState {
 export interface Item {
   id: string;
   name: string;
-  type: 'resource' | 'tool' | 'food' | 'material' | 'structure';
+  type: 'resource' | 'tool' | 'food' | 'material' | 'structure' | 'weapon';
   icon: string;
   description: string;
   stackable: boolean;
@@ -26,6 +26,7 @@ export interface Item {
     thirst?: number;
     health?: number;
     sleep?: number;
+    damage?: number;
   };
 }
 
@@ -38,7 +39,12 @@ export interface Recipe {
   requiresWorkbench?: boolean;
 }
 
-export type EntityType = 'tree' | 'rock' | 'bush' | 'well' | 'player' | 'deer' | 'rabbit' | 'campfire' | 'tent' | 'workbench' | 'hut' | 'scorpion' | 'bear';
+export type EntityType = 
+  | 'tree_oak' | 'tree_pine' | 'tree_palm' 
+  | 'rock_standard' | 'rock_iron' 
+  | 'bush_berry' | 'bush_flower' | 'bush_dry'
+  | 'well' | 'player' | 'deer' | 'rabbit' | 'campfire' | 'tent' | 'workbench' | 'hut' | 'scorpion' | 'bear'
+  | 'bridge' | 'road' | 'stone_wall' | 'watchtower' | 'castle_gate';
 
 export interface Entity {
   id: string;
@@ -48,11 +54,21 @@ export interface Entity {
   health: number;
   maxHealth: number;
   lastMove?: number;
-  // AI related fields
   targetX?: number;
   targetY?: number;
   isFleeing?: boolean;
   spawnTime?: number;
+}
+
+export interface Projectile {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  damage: number;
+  ownerId: string;
+  life: number;
 }
 
 export interface CharacterConfig {
@@ -74,7 +90,6 @@ export interface PlayerStats {
   facing: FacingDirection;
   equippedItemId: string | null;
   character: CharacterConfig;
-  // Track if player is currently moving for visual animations
   isWalking: boolean;
   lastInteractTime: number;
 }
@@ -89,6 +104,7 @@ export interface GameState {
   playerStats: PlayerStats;
   inventory: Item[];
   entities: Entity[];
+  projectiles: Projectile[];
   time: number;
   isDay: boolean;
   gameStarted: boolean;
@@ -97,7 +113,7 @@ export interface GameState {
   viewConfig: {
     zoom: number;
     rotation: number;
-    cameraOffsetX: number; // For mouse panning
-    cameraOffsetY: number; // For mouse panning
+    cameraOffsetX: number;
+    cameraOffsetY: number;
   };
 }

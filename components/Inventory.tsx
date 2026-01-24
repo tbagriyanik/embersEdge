@@ -62,22 +62,22 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, onAction, on
           <h2 className="text-2xl font-black text-amber-500 uppercase tracking-tighter flex items-center gap-3">
              <span className="text-3xl">🎒</span> {t('inventory')}
           </h2>
-          <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all">✕</button>
+          <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all text-lg">✕</button>
         </div>
 
         <div className="flex flex-col sm:flex-row p-6 gap-8 h-[60vh] sm:h-auto">
           {/* Active Equipment */}
           <div className="sm:w-1/3 flex flex-col gap-4">
-            <span className="text-[10px] font-black uppercase tracking-widest text-white/30 text-center">Active Gear</span>
+            <span className="text-[11px] font-black uppercase tracking-widest text-white/40 text-center">Active Gear</span>
             <div 
               ref={equipRef} 
               onPointerEnter={() => !draggedIndex && equippedItem && setHoveredItem(equippedItem)}
               onPointerLeave={() => setHoveredItem(null)}
-              className={`aspect-square rounded-3xl border-2 flex items-center justify-center text-6xl transition-all ${isOverEquip ? 'bg-amber-500/20 border-amber-500 scale-105' : 'bg-black/40 border-white/5'}`}
+              className={`aspect-square rounded-3xl border-2 flex items-center justify-center text-7xl transition-all ${isOverEquip ? 'bg-amber-500/20 border-amber-500 scale-105' : 'bg-black/40 border-white/5'}`}
             >
-               {equippedItem ? equippedItem.icon : <span className="opacity-10">🛡️</span>}
+               {equippedItem ? equippedItem.icon : <span className="opacity-10 text-6xl">🛡️</span>}
             </div>
-            {equippedItem && <div className="text-center"><p className="text-xs font-bold text-white uppercase">{equippedItem.name}</p></div>}
+            {equippedItem && <div className="text-center"><p className="text-[11px] font-bold text-white uppercase tracking-tight">{equippedItem.name}</p></div>}
           </div>
 
           <div className="w-px bg-white/5 hidden sm:block" />
@@ -95,7 +95,7 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, onAction, on
                 className={`relative aspect-square rounded-2xl border flex items-center justify-center text-3xl cursor-grab active:cursor-grabbing transition-all ${equippedItemId === item.id ? 'border-amber-500 bg-amber-500/10' : 'border-white/5 bg-white/5 hover:bg-white/10'}`}
               >
                 {item.icon}
-                <span className="absolute bottom-1 right-2 text-[10px] font-black text-white/60">{item.quantity}</span>
+                <span className="absolute bottom-1 right-2 text-[11px] font-black text-white/70">{item.quantity}</span>
               </div>
             ))}
           </div>
@@ -105,11 +105,11 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, onAction, on
       {/* Tooltip */}
       {hoveredItem && !draggedIndex && (
         <div 
-          className="fixed pointer-events-none z-[300] bg-stone-950/90 backdrop-blur-md border border-white/10 p-3 rounded-xl shadow-2xl flex flex-col gap-1 max-w-[200px]"
+          className="fixed pointer-events-none z-[300] bg-stone-950/90 backdrop-blur-md border border-white/10 p-4 rounded-xl shadow-2xl flex flex-col gap-1.5 max-w-[220px]"
           style={{ left: mousePos.x + 20, top: mousePos.y + 20 }}
         >
-          <span className="text-amber-500 font-black text-xs uppercase tracking-tighter">{hoveredItem.name}</span>
-          <p className="text-[10px] text-white/60 leading-tight">{hoveredItem.description}</p>
+          <span className="text-amber-500 font-black text-[11px] uppercase tracking-wider">{hoveredItem.name}</span>
+          <p className="text-[11px] text-white/70 leading-relaxed font-medium">{hoveredItem.description}</p>
         </div>
       )}
 
