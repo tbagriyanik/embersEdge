@@ -207,7 +207,7 @@ const App: React.FC = () => {
       playerPos: { x: WORLD_SIZE/2, y: WORLD_SIZE/2 + 8 },
       playerStats: { ...INITIAL_STATS, character: prev.playerStats.character },
       inventory: [],
-      entities: spawnEntities(1500),
+      entities: spawnEntities(1200),
       isDead: false,
       gameStarted: true
     }));
@@ -453,7 +453,7 @@ const App: React.FC = () => {
     const state = gameStateRef.current;
     const nearestAnimal = state.entities.find((e: Entity) => ['deer', 'rabbit', 'bear', 'scorpion', 'crab'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.8);
     if (nearestAnimal) { executeInteraction(nearestAnimal.id); return; }
-    const nearestObj = state.entities.find((e: any) => !['deer', 'rabbit', 'bear', 'scorpion', 'crab', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.6);
+    const nearestObj = state.entities.find((e: Entity) => !['deer', 'rabbit', 'bear', 'scorpion', 'crab', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.6);
     if (nearestObj) { executeInteraction(nearestObj.id); return; } 
     let nearWater = false;
     for (let dx = -1.2; dx <= 1.2; dx += 0.4) {
@@ -857,7 +857,7 @@ const App: React.FC = () => {
   }, [handleInteract, uiState, handleHUDAction, isResting, screenToWorld, showMessage, executeInteraction, isPaused]);
 
   if (!gameState.gameStarted) {
-    return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(1500), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: { ...INITIAL_STATS, character: prev.playerStats.character } })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
+    return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(1200), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: { ...INITIAL_STATS, character: prev.playerStats.character } })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
   }
 
   const isNearWorkbench = !!gameState.entities.find((e: Entity) => e.type === 'workbench' && Math.sqrt((e.x - gameState.playerPos.x)**2 + (e.y - gameState.playerPos.y)**2) < 2.5);
@@ -894,7 +894,7 @@ const App: React.FC = () => {
       {uiState.craftingOpen && <Crafting inventory={gameState.inventory} playerLevel={gameState.playerStats.level} isNearWorkbench={isNearWorkbench} onCraft={(recipeId) => {
           const recipe = RECIPES.find(r => r.id === recipeId); if (!recipe) return;
           setGameState((prev: any) => {
-             const canCraft = Object.entries(recipe.ingredients).every(([id, qty]) => {
+             const canCraft = Object.entries(recipe.ingredients).every(([id, qty]: [string, any]) => {
                 const total = prev.inventory.filter((i: Item) => i.id === id).reduce((acc: number, curr: Item) => acc + curr.quantity, 0);
                 return total >= (qty as number);
              });
@@ -906,7 +906,7 @@ const App: React.FC = () => {
              }
              
              let ni = [...prev.inventory];
-             Object.entries(recipe.ingredients).forEach(([id, qty]) => {
+             Object.entries(recipe.ingredients).forEach(([id, qty]: [string, any]) => {
                let remainingToRemove = qty as number;
                while (remainingToRemove > 0) {
                  const idx = ni.findIndex((i: Item) => i.id === id);
