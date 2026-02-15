@@ -463,8 +463,8 @@ const App: React.FC = () => {
       if (nearWater) break;
     }
     if (nearWater) { triggerDrink(); return; }
-    triggerRest();
-  }, [triggerRest, executeInteraction, triggerDrink, isPaused]);
+    // Boşta iken dinlenme uyarısını önlemek için buradaki triggerRest kaldırıldı.
+  }, [executeInteraction, triggerDrink, isPaused]);
 
   const handleHUDAction = useCallback((action: 'use' | 'reorder' | 'equip' | 'repair' | 'repair_all', data: any) => {
     if (action === 'use' || action === 'equip') {
@@ -778,7 +778,7 @@ const App: React.FC = () => {
       return { ...finalState, playerPos: { x: finalX, y: finalY }, entities: updatedEntities, playerStats: { ...finalState.playerStats, health: Math.min(prev.playerStats.maxHealth, nextHealth), lastDamageTime: lastDmgTime, lastCombatDamageTime: lastCombatTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, finalState.playerStats.hunger - hungerDrain), thirst: Math.max(0, finalState.playerStats.thirst - thirstDrain) }, time: (prev.time + 0.1) % 2400 };
     });
     requestRef.current = requestAnimationFrame(update);
-  }, [isResting, uiState, executeInteraction, triggerRest, triggerDrink, handleEntityDeath, isPaused, canCarryItem, showMessage]);
+  }, [isResting, uiState, executeInteraction, triggerDrink, handleEntityDeath, isPaused, canCarryItem, showMessage]);
 
   useEffect(() => { requestRef.current = requestAnimationFrame(update); return () => cancelAnimationFrame(requestRef.current); }, [update]);
 

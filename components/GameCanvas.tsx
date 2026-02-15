@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useMemo } from 'react';
-import { GameState, FacingDirection } from '../types';
+import { GameState, FacingDirection, Entity } from '../types';
 import { TILE_WIDTH, TILE_HEIGHT, WORLD_SIZE, ITEMS } from '../constants';
 import { getTileType } from '../App';
 
@@ -314,8 +314,8 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         const isBuilding = ['tent', 'hut', 'workbench', 'watchtower', 'castle_gate'].includes(ent.type);
         const isStatic = isBuilding || ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'road', 'bridge', 'stone_wall'].includes(ent.type);
         
-        // Daha koyu gölgeler (0.2 -> 0.5)
-        ctx.fillStyle = 'rgba(0,0,0,0.5)'; 
+        // Çok daha koyu ve belirgin gölgeler
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; 
         let shadowW = isStatic ? 8 * zoom : 14 * zoom;
         let shadowH = isStatic ? 4 * zoom : 7 * zoom;
         if (isBuilding) { shadowW *= 1.8; shadowH *= 1.8; }
@@ -335,7 +335,7 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
           ctx.save();
           ctx.translate(centerX, centerY + 10 * zoom - bounce);
           
-          // Tam Opaklık - Hiçbir transparanlık efekti yok
+          // Tam Opaklık Sabitlendi
           ctx.globalAlpha = 1.0; 
           
           ctx.font = `${entityFontSize * zoom}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
