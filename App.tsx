@@ -27,19 +27,55 @@ export const getTileType = (x: number, y: number, level: number = 1): TileType =
   return 'grass';
 };
 
-export const spawnEntities = (count: number): Entity[] => {
+export const spawnEntities = (count: number, safeX?: number, safeY?: number, safeRadius: number = 15): Entity[] => {
   const entities: Entity[] = [];
   const types: EntityType[] = ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'deer', 'rabbit', 'bear', 'scorpion', 'crab'];
-  for (let i = 0; i < count; i++) {
+  
+  let attempts = 0;
+  const maxAttempts = count * 3;
+
+  while (entities.length < count && attempts < maxAttempts) {
+    attempts++;
     const x = Math.random() * (WORLD_SIZE - 10) + 5;
     const y = Math.random() * (WORLD_SIZE - 10) + 5;
     const tile = getTileType(x, y);
+    
     if (tile === 'water') continue;
+
+    let nearWater = false;
+    const offsets = [[2.5, 0], [-2.5, 0], [0, 2.5], [0, -2.5]];
+    for (const [ox, oy] of offsets) {
+      if (getTileType(x + ox, y + oy) === 'water') {
+        nearWater = true;
+        break;
+      }
+    }
+
+    if (!nearWater && Math.random() < 0.85) continue;
+
     let type = types[Math.floor(Math.random() * types.length)];
     if (tile === 'sand') type = Math.random() > 0.5 ? 'tree_palm' : (Math.random() > 0.5 ? 'scorpion' : 'crab');
     else if (type === 'tree_palm' || type === 'scorpion' || type === 'crab') type = 'tree_oak';
+    
+    const hostiles = ['bear', 'scorpion', 'crab'];
+    if (hostiles.includes(type) && safeX !== undefined && safeY !== undefined) {
+      const distToSpawn = Math.sqrt((x - safeX)**2 + (y - safeY)**2);
+      if (distToSpawn < safeRadius) continue;
+    }
+
     if (type === 'bear' && Math.random() > 0.1) continue;
-    entities.push({ id: `ent-${i}-${Date.now()}`, x, y, type: type as EntityType, health: 5, maxHealth: 5, spawnTime: Date.now(), aiState: 'idle', lastAiTick: Date.now() + Math.random() * 2000 });
+    if (type === 'scorpion' && Math.random() > 0.2) continue;
+
+    entities.push({ 
+      id: `ent-${entities.length}-${Date.now()}`, 
+      x, y, 
+      type: type as EntityType, 
+      health: 5, 
+      maxHealth: 5, 
+      spawnTime: Date.now(), 
+      aiState: 'idle', 
+      lastAiTick: Date.now() + Math.random() * 2000 
+    });
   }
   return entities;
 };
@@ -52,10 +88,7 @@ export const findSafePlayerSpawn = (startX: number, startY: number, entities: En
       Math.sqrt((e.x - tx) ** 2 + (e.y - ty) ** 2) < 1.0
     );
   };
-
   if (!isOccupied(startX, startY)) return { x: startX, y: startY };
-
-  // Spiral search for nearest safe spot
   for (let radius = 1; radius < 20; radius++) {
     for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
       const tx = startX + Math.cos(angle) * radius;
@@ -65,7 +98,7 @@ export const findSafePlayerSpawn = (startX: number, startY: number, entities: En
       }
     }
   }
-  return { x: startX, y: startY }; // Fallback
+  return { x: startX, y: startY }; 
 };
 
 export const findPlacementSpot = (x: number, y: number, entities: Entity[]): { x: number; y: number } | null => {
@@ -143,6 +176,16 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(SETTINGS_SAVE_KEY, JSON.stringify({ settings: gameState.settings, character: gameState.playerStats.character }));
   }, [gameState.settings, gameState.playerStats.character]);
+
+  useEffect(() => {
+    const onBlur = () => {
+      if (gameStateRef.current.gameStarted && !gameStateRef.current.isDead) {
+        setGameState((p: any) => ({ ...p, gameStarted: false }));
+      }
+    };
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, []);
 
   const showMessage = useCallback((msgKey: string, direct: boolean = false) => {
     const currentLang = gameStateRef.current.settings.language;
@@ -293,13 +336,26 @@ const App: React.FC = () => {
     if (!isRestingRef.current) {
       if (activeKeys.current.has('w')) dy -= 1; if (activeKeys.current.has('s')) dy += 1;
       if (activeKeys.current.has('a')) dx -= 1; if (activeKeys.current.has('d')) dx += 1;
-      if (dx !== 0 || dy !== 0) { mouseTargetPos.current = null; targetEntityId.current = null; }
-      else if (mouseTargetPos.current) {
-        const cur = state.playerPos; const dist = Math.sqrt((mouseTargetPos.current.x - cur.x)**2 + (mouseTargetPos.current.y - cur.y)**2);
-        if (dist > 0.3) { dx = (mouseTargetPos.current.x - cur.x) / dist; dy = (mouseTargetPos.current.y - cur.y) / dist; }
-        else { 
-          if (targetEntityId.current) { if (targetEntityId.current === 'water_point') triggerDrink(); else executeInteraction(targetEntityId.current); } 
+      
+      if (dx !== 0 || dy !== 0) { 
+        mouseTargetPos.current = null; 
+        targetEntityId.current = null; 
+      } else if (mouseTargetPos.current) {
+        const cur = state.playerPos; 
+        const dist = Math.sqrt((mouseTargetPos.current.x - cur.x)**2 + (mouseTargetPos.current.y - cur.y)**2);
+        
+        const interactRange = targetEntityId.current ? 1.4 : 0.3;
+        
+        if (dist > interactRange) { 
+          dx = (mouseTargetPos.current.x - cur.x) / dist; 
+          dy = (mouseTargetPos.current.y - cur.y) / dist; 
+        } else { 
+          if (targetEntityId.current) { 
+            if (targetEntityId.current === 'water_point') triggerDrink(); 
+            else executeInteraction(targetEntityId.current); 
+          } 
           mouseTargetPos.current = null; 
+          targetEntityId.current = null;
         }
       }
     }
@@ -316,11 +372,17 @@ const App: React.FC = () => {
       const now = Date.now();
       const perfNow = performance.now();
       let nextT = (prev.time + 0.1) % 2400;
-      let respawned: Entity[] = []; if (nextT < prev.time) { respawned = spawnEntities(50); showMessage('new_day'); }
+      let respawned: Entity[] = []; if (nextT < prev.time) { respawned = spawnEntities(280); showMessage('new_day'); }
       
       let nextWeather = { ...prev.weather };
-      if (nextWeather.type !== targetWeather.current) { nextWeather.intensity = Math.max(0, nextWeather.intensity - dt * 0.2); if (nextWeather.intensity <= 0) nextWeather.type = targetWeather.current; }
-      else nextWeather.intensity = Math.min(1.0, nextWeather.intensity + dt * 0.2);
+      // Soft transition speed reduced significantly from 0.2 to 0.04 per second
+      const transitionSpeed = 0.04;
+      if (nextWeather.type !== targetWeather.current) { 
+        nextWeather.intensity = Math.max(0, nextWeather.intensity - dt * transitionSpeed); 
+        if (nextWeather.intensity <= 0) nextWeather.type = targetWeather.current; 
+      } else {
+        nextWeather.intensity = Math.min(1.0, nextWeather.intensity + dt * transitionSpeed);
+      }
 
       const nextProjectiles = prev.projectiles.map((p: any) => ({ ...p, x: p.x + p.vx * dt, y: p.y + p.vy * dt, life: p.life - dt })).filter((p: any) => p.life > 0);
       const nextRipples = (prev.ripples || []).filter((r: any) => perfNow - r.startTime < 1000);
@@ -335,7 +397,13 @@ const App: React.FC = () => {
         } else if (['bear', 'scorpion', 'crab'].includes(ent.type)) {
           if (d < 7) {
             if (d < 1.3) { if (!isRestingRef.current && aC <= 0 && now - prev.playerStats.lastDamageTime > PLAYER_INVINCIBILITY_MS) { pHealthMod -= ent.type === 'bear' ? 3 : 1; aC = 2.0; attacked = true; } }
-            else { const hdx = prev.playerPos.x - ent.x; const hdy = prev.playerPos.y - ent.y; const hm = Math.sqrt(hdx*hdx + hdy*hdy); nX += (hdx/hm) * 2.5 * dt; nY += (hdy/hm) * 2.5 * dt; }
+            else {
+              const hdx = prev.playerPos.x - ent.x; const hdy = prev.playerPos.y - ent.y; const hm = Math.sqrt(hdx*hdx + hdy*hdy);
+              let hostileSpeed = 2.5;
+              if (ent.type === 'bear') hostileSpeed = 4.5;
+              if (ent.type === 'crab') hostileSpeed = 1.2;
+              nX += (hdx/hm) * hostileSpeed * dt; nY += (hdy/hm) * hostileSpeed * dt; 
+            }
           }
         }
         return { ...ent, x: Math.max(2, Math.min(WORLD_SIZE-2, nX)), y: Math.max(2, Math.min(WORLD_SIZE-2, nY)), attackCooldown: aC };
@@ -344,8 +412,19 @@ const App: React.FC = () => {
       const updatedEnts = nextEntities.filter(e => e.type !== 'campfire' || !e.spawnTime || now - e.spawnTime < CAMPFIRE_LIFESPAN);
       const mX = velocity.current.x * dt; const mY = velocity.current.y * dt;
       const coll = (px: number, py: number) => getTileType(px, py) === 'water' || updatedEnts.some(e => !['rabbit', 'scorpion', 'deer', 'crab', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - px)**2 + (e.y - py)**2) < 0.55);
+      
       let fX = prev.playerPos.x; let fY = prev.playerPos.y;
-      if (!coll(fX + mX, fY + mY)) { fX += mX; fY += mY; } else { if (!coll(fX + mX, fY)) fX += mX; if (!coll(fX, fY + mY)) fY += mY; }
+      
+      if (!coll(fX + mX, fY + mY)) { 
+        fX += mX; fY += mY; 
+      } else { 
+        if (mouseTargetPos.current) {
+          mouseTargetPos.current = null;
+          targetEntityId.current = null;
+        }
+        if (!coll(fX + mX, fY)) fX += mX; 
+        if (!coll(fX, fY + mY)) fY += mY; 
+      }
       
       let nH = prev.playerStats.health + pHealthMod; if (pHealthMod < 0) showMessage('danger');
       if (prev.playerStats.hunger <= 0 || prev.playerStats.thirst <= 0) nH -= 0.1;
@@ -366,7 +445,13 @@ const App: React.FC = () => {
       const k = e.key.toLowerCase();
       if (k === 'f') setUiState(s => ({ ...s, inventoryOpen: !s.inventoryOpen, craftingOpen: false, settingsOpen: false }));
       if (k === 'c') setUiState(s => ({ ...s, craftingOpen: !s.craftingOpen, inventoryOpen: false, settingsOpen: false }));
-      if (k === 'escape') setUiState(s => ({ ...s, craftingOpen: false, inventoryOpen: false, settingsOpen: false }));
+      if (k === 'escape') {
+        if (uiStateRef.current.inventoryOpen || uiStateRef.current.craftingOpen || uiStateRef.current.settingsOpen) {
+          setUiState(s => ({ ...s, craftingOpen: false, inventoryOpen: false, settingsOpen: false }));
+        } else if (gameStateRef.current.gameStarted && !gameStateRef.current.isDead) {
+          setGameState((p: any) => ({ ...p, gameStarted: false }));
+        }
+      }
       
       if (isPausedRef.current) return;
       activeKeys.current.add(k);
@@ -405,7 +490,6 @@ const App: React.FC = () => {
       }
       const wp = screenToWorld(e.clientX, e.clientY); if (!wp) return;
       
-      // Ripple Effect on Water
       if (getTileType(wp.x, wp.y) === 'water') {
         setGameState((prev: any) => ({
           ...prev,
@@ -427,14 +511,28 @@ const App: React.FC = () => {
         } else showMessage('out_of_arrows');
       }
 
-      // Interaction check
+      // Mouse click unified interaction:
+      // Clicking an entity now immediately evaluates if interaction is possible, or schedules movement to it.
       const clickedEntity = gameStateRef.current.entities.find((ent: any) => Math.sqrt((ent.x - wp.x)**2 + (ent.y - wp.y)**2) < 1.2);
       if (clickedEntity) {
-        executeInteraction(clickedEntity.id);
-        mouseTargetPos.current = null;
+        // If already in range, act like 'E' was pressed immediately.
+        const d = Math.sqrt((clickedEntity.x - gameStateRef.current.playerPos.x)**2 + (clickedEntity.y - gameStateRef.current.playerPos.y)**2);
+        if (d < 1.8) {
+          executeInteraction(clickedEntity.id);
+          mouseTargetPos.current = null;
+        } else {
+          mouseTargetPos.current = { x: clickedEntity.x, y: clickedEntity.y };
+          targetEntityId.current = clickedEntity.id;
+        }
       } else {
         mouseTargetPos.current = wp;
         targetEntityId.current = getTileType(wp.x, wp.y) === 'water' ? 'water_point' : null;
+        // If clicking water and in range, drink immediately.
+        if (targetEntityId.current === 'water_point') {
+           let nearWater = false;
+           for (let dx = -1.2; dx <= 1.2; dx += 0.4) { for (let dy = -1.2; dy <= 1.2; dy += 0.4) { if (getTileType(gameStateRef.current.playerPos.x + dx, gameStateRef.current.playerPos.y + dy) === 'water') { nearWater = true; break; } } if (nearWater) break; }
+           if (nearWater) { triggerDrink(); mouseTargetPos.current = null; }
+        }
       }
     };
     
@@ -457,12 +555,15 @@ const App: React.FC = () => {
       window.removeEventListener('mousemove', onMM); 
       window.removeEventListener('mouseup', onMU);
     };
-  }, [handleInteract, screenToWorld, showMessage, executeInteraction]);
+  }, [handleInteract, screenToWorld, showMessage, executeInteraction, triggerDrink]);
 
   const handleStart = useCallback(() => {
     SoundManager.init(); SoundManager.startForestAmbience(); window.focus();
-    const newEntities = spawnEntities(1200);
-    const safePos = findSafePlayerSpawn(WORLD_SIZE / 2, WORLD_SIZE / 2 + 8, newEntities);
+    const spawnX = WORLD_SIZE / 2;
+    const spawnY = WORLD_SIZE / 2 + 8;
+    // Reduced entity count by 30% from 10,000 to 7,000
+    const newEntities = spawnEntities(7000, spawnX, spawnY, 15);
+    const safePos = findSafePlayerSpawn(spawnX, spawnY, newEntities);
     setGameState((prev: any) => ({ 
       ...prev, 
       gameStarted: true, 
@@ -544,10 +645,27 @@ const App: React.FC = () => {
                 if (!canCarryItem(recipe.output.id, recipe.output.quantity, prev.inventory)) { showMessage('inv_full'); return prev; }
                 let ni = [...prev.inventory];
                 Object.entries(recipe.ingredients).forEach(([id, q]) => { let rem = q as number; while (rem > 0) { const idx = ni.findIndex(i => i.id === id); if (idx > -1) { const d = Math.min(rem, ni[idx].quantity); ni[idx].quantity -= d; rem -= d; if (ni[idx].quantity <= 0) ni.splice(idx, 1); } else break; } });
-                let uE = [...prev.entities]; let pD = false;
-                if (recipe.output.type === 'structure') { const spot = findPlacementSpot(prev.playerPos.x, prev.playerPos.y, uE); if (spot) { uE.push({ id: `struct-${Date.now()}`, x: spot.x, y: spot.y, type: recipe.output.id as EntityType, health: 10, maxHealth: 10, spawnTime: Date.now() }); pD = true; showMessage(t('placed')+': '+recipe.name, true); SoundManager.playUI('fanfare'); } }
-                if (!pD) { ni = addItemsToInventory(recipe.output.id, recipe.output.quantity, ni); SoundManager.playUI('fanfare'); showMessage(t('crafted')+': '+recipe.name, true); }
-                return { ...prev, inventory: ni, entities: uE };
+                let uE = [...prev.entities]; 
+                let pD = false;
+                let nextEq = prev.playerStats.equippedItemId;
+                
+                if (recipe.output.type === 'structure') {
+                   const spot = findPlacementSpot(prev.playerPos.x, prev.playerPos.y, uE); 
+                   if (spot) { 
+                     uE.push({ id: `struct-${Date.now()}`, x: spot.x, y: spot.y, type: recipe.output.id as EntityType, health: 10, maxHealth: 10, spawnTime: Date.now() }); 
+                     pD = true; showMessage(t('placed')+': '+recipe.name, true); SoundManager.playUI('fanfare'); 
+                   } 
+                }
+                
+                if (!pD) { 
+                  ni = addItemsToInventory(recipe.output.id, recipe.output.quantity, ni); 
+                  SoundManager.playUI('fanfare'); 
+                  showMessage(t('crafted')+': '+recipe.name, true);
+                  if ((recipe.output.type === 'tool' || recipe.output.type === 'weapon') && !nextEq) {
+                    nextEq = recipe.output.id;
+                  }
+                }
+                return { ...prev, inventory: ni, entities: uE, playerStats: { ...prev.playerStats, equippedItemId: nextEq } };
               });
           }} onClose={() => setUiState(s => ({...s, craftingOpen: false}))} onSwitchToInventory={() => setUiState(s => ({...s, inventoryOpen: true, craftingOpen: false}))} language={gameState.settings.language} />}
           {uiState.settingsOpen && (

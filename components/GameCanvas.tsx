@@ -245,6 +245,26 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         }
       }
 
+      // Draw Destination Marker (Mouse Click Target)
+      if (mouseTargetRef.current) {
+        const targetPos = mouseTargetRef.current;
+        const s = toScreen(targetPos.x, targetPos.y, zoom, rotation);
+        const centerX = s.x + (TILE_WIDTH * zoom) / 2;
+        const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
+        const pulse = Math.abs(Math.sin(now / 300));
+        
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(Math.PI / 4);
+        ctx.strokeStyle = `rgba(245, 158, 11, ${0.4 + pulse * 0.6})`;
+        ctx.lineWidth = 3 * zoom;
+        ctx.strokeRect(-10 * zoom * (1 + pulse * 0.2), -10 * zoom * (1 + pulse * 0.2), 20 * zoom * (1 + pulse * 0.2), 20 * zoom * (1 + pulse * 0.2));
+        
+        ctx.fillStyle = `rgba(245, 158, 11, ${0.2 + pulse * 0.3})`;
+        ctx.fillRect(-6 * zoom, -6 * zoom, 12 * zoom, 12 * zoom);
+        ctx.restore();
+      }
+
       // Draw Ripples
       state.ripples?.forEach((r: any) => {
         const s = toScreen(r.x, r.y, zoom, rotation);
