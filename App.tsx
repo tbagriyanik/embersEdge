@@ -162,7 +162,7 @@ const App: React.FC = () => {
   useEffect(() => { uiStateRef.current = uiState; }, [uiState]);
   useEffect(() => { isRestingRef.current = isResting; }, [isResting]);
 
-  const lang = gameState.settings.language;
+  const lang: Language = gameState.settings.language;
   const t = useCallback((key: string) => TRANSLATIONS[lang][key] || key, [lang]);
   const isPaused = useMemo(() => uiState.inventoryOpen || uiState.craftingOpen || uiState.settingsOpen || gameState.isDead, [uiState, gameState.isDead]);
   const isPausedRef = useRef(isPaused);
@@ -188,7 +188,7 @@ const App: React.FC = () => {
   }, []);
 
   const showMessage = useCallback((msgKey: string, direct: boolean = false) => {
-    const currentLang = gameStateRef.current.settings.language;
+    const currentLang: Language = gameStateRef.current.settings.language;
     const msg = direct ? msgKey : TRANSLATIONS[currentLang][msgKey] || msgKey;
     setUiState(prev => ({ ...prev, message: msg }));
     setTimeout(() => setUiState(prev => ({ ...prev, message: '' })), 4000);
@@ -375,7 +375,6 @@ const App: React.FC = () => {
       let respawned: Entity[] = []; if (nextT < prev.time) { respawned = spawnEntities(280); showMessage('new_day'); }
       
       let nextWeather = { ...prev.weather };
-      // Soft transition speed reduced significantly from 0.2 to 0.04 per second
       const transitionSpeed = 0.04;
       if (nextWeather.type !== targetWeather.current) { 
         nextWeather.intensity = Math.max(0, nextWeather.intensity - dt * transitionSpeed); 
@@ -511,11 +510,8 @@ const App: React.FC = () => {
         } else showMessage('out_of_arrows');
       }
 
-      // Mouse click unified interaction:
-      // Clicking an entity now immediately evaluates if interaction is possible, or schedules movement to it.
       const clickedEntity = gameStateRef.current.entities.find((ent: any) => Math.sqrt((ent.x - wp.x)**2 + (ent.y - wp.y)**2) < 1.2);
       if (clickedEntity) {
-        // If already in range, act like 'E' was pressed immediately.
         const d = Math.sqrt((clickedEntity.x - gameStateRef.current.playerPos.x)**2 + (clickedEntity.y - gameStateRef.current.playerPos.y)**2);
         if (d < 1.8) {
           executeInteraction(clickedEntity.id);
@@ -527,7 +523,6 @@ const App: React.FC = () => {
       } else {
         mouseTargetPos.current = wp;
         targetEntityId.current = getTileType(wp.x, wp.y) === 'water' ? 'water_point' : null;
-        // If clicking water and in range, drink immediately.
         if (targetEntityId.current === 'water_point') {
            let nearWater = false;
            for (let dx = -1.2; dx <= 1.2; dx += 0.4) { for (let dy = -1.2; dy <= 1.2; dy += 0.4) { if (getTileType(gameStateRef.current.playerPos.x + dx, gameStateRef.current.playerPos.y + dy) === 'water') { nearWater = true; break; } } if (nearWater) break; }
@@ -561,7 +556,6 @@ const App: React.FC = () => {
     SoundManager.init(); SoundManager.startForestAmbience(); window.focus();
     const spawnX = WORLD_SIZE / 2;
     const spawnY = WORLD_SIZE / 2 + 8;
-    // Reduced entity count by 30% from 10,000 to 7,000
     const newEntities = spawnEntities(7000, spawnX, spawnY, 15);
     const safePos = findSafePlayerSpawn(spawnX, spawnY, newEntities);
     setGameState((prev: any) => ({ 
@@ -637,8 +631,8 @@ const App: React.FC = () => {
           <div className="absolute top-6 right-6 pointer-events-none z-50">
             <Minimap playerPos={gameState.playerPos} entities={gameState.entities} playerStats={gameState.playerStats} language={gameState.settings.language} />
           </div>
-          {uiState.inventoryOpen && <Inventory items={gameState.inventory} equippedItemId={gameState.playerStats.equippedItemId} isNearWorkbench={!!gameState.entities.find(e => e.type === 'workbench' && Math.sqrt((e.x-gameState.playerPos.x)**2+(e.y-gameState.playerPos.y)**2)<2.5)} onAction={() => {}} onClose={() => setUiState(s => ({...s, inventoryOpen: false}))} onSwitchToCrafting={() => setUiState(s => ({...s, inventoryOpen: false, craftingOpen: true}))} language={gameState.settings.language} />}
-          {uiState.craftingOpen && <Crafting inventory={gameState.inventory} playerLevel={gameState.playerStats.level} isNearWorkbench={!!gameState.entities.find(e => e.type === 'workbench' && Math.sqrt((e.x-gameState.playerPos.x)**2+(e.y-gameState.playerPos.y)**2)<2.5)} onCraft={(recipeId) => {
+          {uiState.inventoryOpen && <Inventory items={gameState.inventory} equippedItemId={gameState.playerStats.equippedItemId} isNearWorkbench={!!gameState.entities.find((e: Entity) => e.type === 'workbench' && Math.sqrt((e.x-gameState.playerPos.x)**2+(e.y-gameState.playerPos.y)**2)<2.5)} onAction={() => {}} onClose={() => setUiState(s => ({...s, inventoryOpen: false}))} onSwitchToCrafting={() => setUiState(s => ({...s, inventoryOpen: false, craftingOpen: true}))} language={gameState.settings.language} />}
+          {uiState.craftingOpen && <Crafting inventory={gameState.inventory} playerLevel={gameState.playerStats.level} isNearWorkbench={!!gameState.entities.find((e: Entity) => e.type === 'workbench' && Math.sqrt((e.x-gameState.playerPos.x)**2+(e.y-gameState.playerPos.y)**2)<2.5)} onCraft={(recipeId) => {
               const recipe = RECIPES.find(r => r.id === recipeId); if (!recipe) return;
               setGameState((prev: any) => {
                 if (!Object.entries(recipe.ingredients).every(([id, q]) => prev.inventory.filter((i: any) => i.id === id).reduce((acc: number, curr: any) => acc + curr.quantity, 0) >= (q as number))) return prev;
