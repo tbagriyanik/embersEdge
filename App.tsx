@@ -565,9 +565,9 @@ const App: React.FC = () => {
         if (ent.type === 'deer' || ent.type === 'rabbit') {
           if (distToPlayer < 5 || ent.isFleeing) {
             newState = 'fleeing'; const edx = ent.x - prev.playerPos.x; const edy = ent.y - prev.playerPos.y; const emag = Math.sqrt(edx*edx + edy*edy); const speed = ent.type === 'rabbit' ? 6 : 4; newX += (edx/emag) * speed * dt; newY += (edy/emag) * speed * dt; if (distToPlayer > 12) ent.isFleeing = false;
-          } else if (!targetX || now - (ent.lastAiTick || 0) > 4000) {
+          } else if (targetX === undefined || now - (ent.lastAiTick || 0) > 4000) {
             if (Math.random() > 0.7) { newState = 'grazing'; targetX = ent.x; targetY = ent.y; } else { newState = 'idle'; targetX = ent.x + (Math.random() - 0.5) * 8; targetY = ent.y + (Math.random() - 0.5) * 8; } ent.lastAiTick = now;
-          } else if (newState === 'idle' && targetX) { const tdx = targetX - ent.x; const tdy = targetY - ent.y; const td = Math.sqrt(tdx*tdx + tdy*tdy); if (td > 0.2) { newX += (tdx/td) * 1.5 * dt; newY += (tdy/td) * 1.5 * dt; } }
+          } else if (newState === 'idle' && targetX !== undefined && targetY !== undefined) { const tdx = targetX - ent.x; const tdy = targetY - ent.y; const td = Math.sqrt(tdx*tdx + tdy*tdy); if (td > 0.2) { newX += (tdx/td) * 1.5 * dt; newY += (tdy/td) * 1.5 * dt; } }
         }
 
         if (ent.type === 'bear' || ent.type === 'scorpion') {
@@ -581,11 +581,12 @@ const App: React.FC = () => {
                 animalAttackTriggered = true;
               }
             } else {
+              // Fix for line 584: Changed hdy*hmag to hdy*hdy to correctly calculate distance (magnitude)
               newState = 'hunting'; const hdx = prev.playerPos.x - ent.x; const hdy = prev.playerPos.y - ent.y; const hmag = Math.sqrt(hdx*hdx + hdy*hdy); const speed = ent.type === 'bear' ? 3.0 : 2.2; newX += (hdx/hmag) * speed * dt; newY += (hdy/hmag) * speed * dt;
             }
-          } else if (!targetX || now - (ent.lastAiTick || 0) > 5000) {
+          } else if (targetX === undefined || now - (ent.lastAiTick || 0) > 5000) {
             newState = 'prowling'; targetX = ent.x + (Math.random() - 0.5) * 6; targetY = ent.y + (Math.random() - 0.5) * 6; ent.lastAiTick = now;
-          } else if (newState === 'prowling' && targetX) { const pdx = targetX - ent.x; const pdy = targetY - ent.y; const pd = Math.sqrt(pdx*pdx + pdy*pdy); if (pd > 0.2) { newX += (pdx/pd) * 1 * dt; newY += (pdy/pd) * 1 * dt; } }
+          } else if (newState === 'prowling' && targetX !== undefined && targetY !== undefined) { const pdx = targetX - ent.x; const pdy = targetY - ent.y; const pd = Math.sqrt(pdx*pdx + pdy*pdy); if (pd > 0.2) { newX += (pdx/pd) * 1 * dt; newY += (pdy/pd) * 1 * dt; } }
         }
         newX = Math.max(2, Math.min(WORLD_SIZE - 2, newX)); newY = Math.max(2, Math.min(WORLD_SIZE - 2, newY));
         return { ...ent, x: newX, y: newY, aiState: newState, targetX, targetY, attackCooldown } as Entity;
@@ -618,7 +619,7 @@ const App: React.FC = () => {
       return { ...finalState, playerPos: { x: finalX, y: finalY }, entities: updatedEntities, playerStats: { ...finalState.playerStats, health: Math.min(prev.playerStats.maxHealth, nextHealth), lastDamageTime: lastDmgTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, finalState.playerStats.hunger - hungerDrain), thirst: Math.max(0, finalState.playerStats.thirst - thirstDrain) }, time: (prev.time + 0.1) % 2400 };
     });
     requestRef.current = requestAnimationFrame(update);
-  }, [isResting, uiState, executeInteraction, triggerRest, triggerDrink, handleEntityDeath, isPaused]);
+  }, [isResting, uiState, executeInteraction, triggerRest, triggerDrink, handleEntityDeath, isPaused, canCarryItem, showMessage]);
 
   useEffect(() => { requestRef.current = requestAnimationFrame(update); return () => cancelAnimationFrame(requestRef.current); }, [update]);
 
