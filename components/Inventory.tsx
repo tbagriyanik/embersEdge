@@ -6,12 +6,14 @@ import { TRANSLATIONS } from '../constants';
 interface Props {
   items: Item[];
   equippedItemId: string | null;
-  onAction: (action: 'use' | 'reorder' | 'equip', data: any) => void;
+  isNearWorkbench: boolean;
+  onAction: (action: 'use' | 'reorder' | 'equip' | 'repair', data: any) => void;
   onClose: () => void;
+  onSwitchToCrafting: () => void;
   language: Language;
 }
 
-export const Inventory: React.FC<Props> = ({ items, equippedItemId, onAction, onClose, language }) => {
+export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbench, onAction, onClose, onSwitchToCrafting, language }) => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -40,7 +42,7 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, onAction, on
   const handlePointerUp = (e: React.PointerEvent) => {
     if (draggedIndex === null) return;
     const dragItem = items[draggedIndex];
-    if (isOverEquip && dragItem.type === 'tool') onAction('equip', dragItem);
+    if (isOverEquip && (dragItem.type === 'tool' || dragItem.type === 'weapon')) onAction('equip', dragItem);
     else {
       const elements = document.elementsFromPoint(e.clientX, e.clientY);
       const slotElement = elements.find(el => el.hasAttribute('data-slot-idx'));
@@ -62,7 +64,15 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, onAction, on
           <h2 className="text-2xl font-black text-amber-500 uppercase tracking-tighter flex items-center gap-3">
              <span className="text-3xl">🎒</span> {t('inventory')}
           </h2>
-          <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all text-lg">✕</button>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={onSwitchToCrafting} 
+              className="px-4 py-2 rounded-xl bg-amber-500 text-stone-900 font-black text-[11px] uppercase tracking-widest hover:scale-105 transition-transform"
+            >
+              ⚒️ {t('crafting')}
+            </button>
+            <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all text-lg">✕</button>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row p-6 gap-8 h-[60vh] sm:h-auto">
@@ -73,9 +83,17 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, onAction, on
               ref={equipRef} 
               onPointerEnter={() => !draggedIndex && equippedItem && setHoveredItem(equippedItem)}
               onPointerLeave={() => setHoveredItem(null)}
-              className={`aspect-square rounded-3xl border-2 flex items-center justify-center text-7xl transition-all ${isOverEquip ? 'bg-amber-500/20 border-amber-500 scale-105' : 'bg-black/40 border-white/5'}`}
+              className={`aspect-square relative rounded-3xl border-2 flex items-center justify-center text-7xl transition-all ${isOverEquip ? 'bg-amber-500/20 border-amber-500 scale-105' : 'bg-black/40 border-white/5'}`}
             >
                {equippedItem ? equippedItem.icon : <span className="opacity-10 text-6xl">🛡️</span>}
+               {equippedItem && equippedItem.durability !== undefined && (
+                 <div className="absolute bottom-4 left-4 right-4 h-1.5 bg-black/60 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-emerald-500" 
+                      style={{ width: `${(equippedItem.durability / (equippedItem.maxDurability || 1)) * 100}%` }} 
+                    />
+                 </div>
+               )}
             </div>
             {equippedItem && <div className="text-center"><p className="text-[11px] font-bold text-white uppercase tracking-tight">{equippedItem.name}</p></div>}
           </div>
@@ -95,21 +113,50 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, onAction, on
                 className={`relative aspect-square rounded-2xl border flex items-center justify-center text-3xl cursor-grab active:cursor-grabbing transition-all ${equippedItemId === item.id ? 'border-amber-500 bg-amber-500/10' : 'border-white/5 bg-white/5 hover:bg-white/10'}`}
               >
                 {item.icon}
-                <span className="absolute bottom-1 right-2 text-[11px] font-black text-white/70">{item.quantity}</span>
+                {item.quantity > 1 && <span className="absolute bottom-1 right-2 text-[11px] font-black text-white/70">{item.quantity}</span>}
+                
+                {/* Mini durability bar */}
+                {item.durability !== undefined && (
+                  <div className="absolute bottom-1.5 left-2 right-2 h-1 bg-black/40 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-emerald-500" 
+                      style={{ width: `${(item.durability / (item.maxDurability || 1)) * 100}%` }} 
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Tooltip */}
+      {/* Tooltip & Repair Action */}
       {hoveredItem && !draggedIndex && (
         <div 
-          className="fixed pointer-events-none z-[300] bg-stone-950/90 backdrop-blur-md border border-white/10 p-4 rounded-xl shadow-2xl flex flex-col gap-1.5 max-w-[220px]"
+          className="fixed pointer-events-none z-[300] bg-stone-950/90 backdrop-blur-md border border-white/10 p-4 rounded-xl shadow-2xl flex flex-col gap-2 max-w-[240px]"
           style={{ left: mousePos.x + 20, top: mousePos.y + 20 }}
         >
-          <span className="text-amber-500 font-black text-[11px] uppercase tracking-wider">{hoveredItem.name}</span>
+          <div className="flex justify-between items-start gap-4">
+            <span className="text-amber-500 font-black text-[11px] uppercase tracking-wider">{hoveredItem.name}</span>
+            {hoveredItem.durability !== undefined && (
+              <span className="text-[10px] font-mono text-white/40">{hoveredItem.durability}/{hoveredItem.maxDurability}</span>
+            )}
+          </div>
           <p className="text-[11px] text-white/70 leading-relaxed font-medium">{hoveredItem.description}</p>
+          
+          {hoveredItem.durability !== undefined && hoveredItem.durability < (hoveredItem.maxDurability || 1) && (
+            <div className="mt-2 flex flex-col gap-2 pointer-events-auto">
+              <div className="h-px bg-white/10" />
+              <button 
+                onClick={(e) => { e.stopPropagation(); onAction('repair', hoveredItem); }}
+                disabled={!isNearWorkbench}
+                className={`w-full py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isNearWorkbench ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-white/5 text-white/20'}`}
+              >
+                🛠️ {t('repair')} (2🪵, 2🪨)
+              </button>
+              {!isNearWorkbench && <span className="text-[8px] text-center text-white/30 uppercase">{t('at_workbench')}</span>}
+            </div>
+          )}
         </div>
       )}
 

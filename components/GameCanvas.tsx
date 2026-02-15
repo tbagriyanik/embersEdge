@@ -1,32 +1,30 @@
 
-import React, { useRef, useEffect, useCallback } from 'react';
-import { GameState } from '../types';
-import { TILE_WIDTH, TILE_HEIGHT, WORLD_SIZE } from '../constants';
+import React, { useRef, useEffect, useMemo } from 'react';
+import { GameState, FacingDirection } from '../types';
+import { TILE_WIDTH, TILE_HEIGHT, WORLD_SIZE, ITEMS } from '../constants';
 import { getTileType } from '../App';
 
 interface Props {
-  gameState: GameState;
-  gameStateRef: React.RefObject<GameState | null>;
+  gameState: GameState & { 
+    birds: {x: number, y: number, vx: number, vy: number, flap: number}[],
+    ripples: {x: number, y: number, startTime: number}[] 
+  };
+  gameStateRef: React.RefObject<any>;
   mouseTargetRef: React.RefObject<{ x: number, y: number } | null>;
 }
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  maxLife: number;
-  size: number;
-  color: string;
-}
-
-export const GameCanvas: React.FC<Props> = ({ gameState, gameStateRef, mouseTargetRef }) => {
+export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const visualScales = useRef<Map<string, number>>(new Map());
-  const hitJolts = useRef<Map<string, number>>(new Map());
-  const lastHealths = useRef<Map<string, number>>(new Map());
-  const particles = useRef<Particle[]>([]);
+  
+  const stars = useMemo(() => {
+    return [...Array(120)].map(() => ({
+      x: Math.random(),
+      y: Math.random(),
+      size: Math.random() * 2 + 0.5,
+      twinkleSpeed: Math.random() * 0.05 + 0.01,
+      phase: Math.random() * Math.PI * 2
+    }));
+  }, []);
 
   const getTransformedCoords = (wx: number, wy: number, rotation: number) => {
     if (rotation === 90) return { tx: wy, ty: WORLD_SIZE - 1 - wx };
@@ -42,22 +40,117 @@ export const GameCanvas: React.FC<Props> = ({ gameState, gameStateRef, mouseTarg
     return { x: tx * tw, y: ty * th };
   };
 
-  const spawnParticles = (x: number, y: number) => {
-    const count = 6 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 0.5 + Math.random() * 1.5;
-      particles.current.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed * 0.03,
-        vy: Math.sin(angle) * speed * 0.03 - 0.03,
-        life: 0.8,
-        maxLife: 0.4 + Math.random() * 0.4,
-        size: 1 + Math.random() * 2,
-        color: Math.random() > 0.5 ? '#78350f' : '#451a03' 
-      });
+  const drawPlayer = (ctx: CanvasRenderingContext2D, x: number, y: number, zoom: number, stats: any, now: number) => {
+    const isWalking = stats.isWalking;
+    const facing: FacingDirection = stats.facing;
+    const gender = stats.character.gender;
+    const outfitColor = stats.character.outfitColor || '#451a03';
+    const skinColor = '#fde68a';
+    const hairColor = '#27272a';
+    const equippedItemId = stats.equippedItemId;
+    const lastInteract = stats.lastInteractTime || 0;
+    const isInteracting = (now - lastInteract) < 400;
+
+    const timeSinceHit = now - (stats.lastDamageTime || 0);
+    const isRecentlyHit = timeSinceHit < 1000;
+    
+    // Condition for blood splat visibility
+    const isLowHealth = stats.health < 25;
+    const isExtremeHunger = stats.hunger < 15;
+    const isExtremeThirst = stats.thirst < 15;
+    const showBloodParticles = isRecentlyHit || isLowHealth || isExtremeHunger || isExtremeThirst;
+
+    const swing = isWalking ? Math.sin(now / 100) * 0.4 : 0;
+    const bob = isWalking ? Math.abs(Math.sin(now / 100)) * 2 * zoom : 0;
+
+    ctx.save();
+    ctx.translate(x, y - bob);
+    ctx.globalAlpha = 1.0; 
+
+    // Body
+    // Body flashes red ONLY when recently hit by an attack (Sadece saldırı var ise kan efekti mantığı)
+    ctx.fillStyle = isRecentlyHit && Math.sin(now / 50) > 0 ? '#b91c1c' : outfitColor;
+    if (gender === 'male') {
+      ctx.beginPath();
+      ctx.roundRect(-12 * zoom, -20 * zoom, 24 * zoom, 28 * zoom, 4 * zoom);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(-10 * zoom, -20 * zoom);
+      ctx.lineTo(10 * zoom, -20 * zoom);
+      ctx.lineTo(12 * zoom, 8 * zoom);
+      ctx.lineTo(-12 * zoom, 8 * zoom);
+      ctx.closePath();
+      ctx.fill();
     }
+
+    // Blood splats / particles - Appear for hits, low health, hunger or thirst
+    if (showBloodParticles) {
+      ctx.fillStyle = '#991b1b'; 
+      const splatCount = isRecentlyHit ? 6 : (isLowHealth ? 3 : 2);
+      for(let i=0; i<splatCount; i++) {
+        const seed = i * 13.5;
+        const drift = Math.sin(seed + now / 500) * 4 * zoom;
+        const sx = Math.sin(seed) * 12 * zoom + drift;
+        const sy = Math.cos(seed * 0.7) * 18 * zoom - 12 * zoom + Math.cos(now / 300) * 3 * zoom;
+        ctx.beginPath();
+        ctx.arc(sx, sy, (1 + Math.random() * 2) * zoom, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Arms
+    const drawArm = (side: number, angle: number, hasTool: boolean) => {
+      ctx.save();
+      ctx.translate(side * 12 * zoom, -16 * zoom);
+      const interactProgress = isInteracting && hasTool ? Math.min(1, (now - lastInteract) / 400) : 0;
+      const interactSwing = interactProgress > 0 ? Math.sin(interactProgress * Math.PI) * 1.8 : 0;
+      ctx.rotate(angle + interactSwing);
+      ctx.fillStyle = isRecentlyHit && Math.sin(now / 50) > 0 ? '#b91c1c' : outfitColor;
+      ctx.fillRect(-3 * zoom, 0, 6 * zoom, 16 * zoom);
+      ctx.fillStyle = skinColor;
+      ctx.beginPath(); ctx.arc(0, 16 * zoom, 4 * zoom, 0, Math.PI * 2); ctx.fill();
+
+      if (hasTool && equippedItemId) {
+        const item = ITEMS[equippedItemId];
+        if (item) {
+          ctx.save();
+          ctx.translate(0, 18 * zoom);
+          ctx.rotate(-Math.PI / 2 + interactSwing * 0.5);
+          ctx.font = `${28 * zoom}px serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(item.icon, 0, 0);
+          ctx.restore();
+        }
+      }
+      ctx.restore();
+    };
+
+    drawArm(-1, swing, false);
+    drawArm(1, -swing, equippedItemId !== null);
+    ctx.fillStyle = skinColor; ctx.beginPath(); ctx.arc(0, -28 * zoom, 10 * zoom, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = hairColor; ctx.beginPath(); ctx.arc(0, -32 * zoom, 11 * zoom, Math.PI, 0); ctx.fill();
+    if (gender === 'female') { ctx.beginPath(); const ponytailSwing = isWalking ? Math.sin(now / 200) * 5 * zoom : 0; ctx.arc(-8 * zoom + ponytailSwing, -25 * zoom, 6 * zoom, 0, Math.PI * 2); ctx.fill(); }
+    const showFace = facing === 'se' || facing === 'sw';
+    if (showFace) { ctx.fillStyle = '#000'; const eyeOffset = facing === 'se' ? 2 * zoom : -2 * zoom; ctx.beginPath(); ctx.arc(eyeOffset - 3 * zoom, -28 * zoom, 1.5 * zoom, 0, Math.PI * 2); ctx.arc(eyeOffset + 3 * zoom, -28 * zoom, 1.5 * zoom, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  };
+
+  const drawSky = (ctx: CanvasRenderingContext2D, time: number, now: number, width: number, height: number) => {
+    const isNight = time < 500 || time > 1900;
+    if (!isNight) return;
+    let nightOpacity = 0;
+    if (time < 500) nightOpacity = 1 - (time / 500);
+    else if (time > 1900) nightOpacity = (time - 1900) / 500;
+    ctx.save();
+    ctx.globalAlpha = nightOpacity;
+    stars.forEach(s => {
+      const twinkle = Math.sin(now * s.twinkleSpeed + s.phase) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(255, 255, 255, ${twinkle})`;
+      ctx.beginPath(); ctx.arc(s.x * width, s.y * height, s.size, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.restore();
   };
 
   useEffect(() => {
@@ -65,42 +158,46 @@ export const GameCanvas: React.FC<Props> = ({ gameState, gameStateRef, mouseTarg
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
-
     let frameId: number;
-    const resize = () => { 
-      canvas.width = window.innerWidth; 
-      canvas.height = window.innerHeight; 
-    };
-    window.addEventListener('resize', resize);
-    resize();
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    window.addEventListener('resize', resize); resize();
 
     const render = () => {
       const state = gameStateRef.current;
-      if (!state) {
-        frameId = requestAnimationFrame(render);
-        return;
-      }
-
-      const now = Date.now();
-      const timeOfDay = state.time;
+      if (!state) { frameId = requestAnimationFrame(render); return; }
+      const now = performance.now();
+      const time = state.time;
       const zoom = state.viewConfig.zoom;
       const rotation = state.viewConfig.rotation;
       const cameraOffsetX = state.viewConfig.cameraOffsetX;
       const cameraOffsetY = state.viewConfig.cameraOffsetY;
 
-      let ambientAlpha = timeOfDay < 400 || timeOfDay > 2100 ? 0.95 : (timeOfDay < 700 ? 0.95 * (1 - (timeOfDay - 400)/300) : (timeOfDay > 1800 ? 0.95 * ((timeOfDay - 1800)/300) : 0));
-      
-      ctx.fillStyle = '#0c0a09';
+      let bgColor = '#1c1917';
+      if (time < 500 || time > 2000) bgColor = '#020617';
+      else if (time >= 500 && time < 800) bgColor = '#2d1b0d';
+      else if (time >= 1700 && time < 2000) bgColor = '#1e1b4b';
+
+      ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
+      drawSky(ctx, time, now, canvas.width, canvas.height);
+
       const pS = toScreen(state.playerPos.x, state.playerPos.y, zoom, rotation);
       ctx.save();
-      ctx.translate(
-        canvas.width / 2 - (pS.x + (TILE_WIDTH * zoom) / 2) + cameraOffsetX, 
-        canvas.height / 2 - (pS.y + (TILE_HEIGHT * zoom) / 2) + cameraOffsetY
-      );
+      ctx.translate(canvas.width / 2 - (pS.x + (TILE_WIDTH * zoom) / 2) + cameraOffsetX, canvas.height / 2 - (pS.y + (TILE_HEIGHT * zoom) / 2) + cameraOffsetY);
 
-      const renderRange = 16 / zoom;
+      // Combat Range Circle
+      if (state.playerStats.equippedItemId) {
+        ctx.save();
+        ctx.beginPath();
+        const range = 1.8 * TILE_WIDTH * zoom;
+        ctx.arc(pS.x + (TILE_WIDTH * zoom) / 2, pS.y + (TILE_HEIGHT * zoom) / 2, range, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.1)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      const renderRange = 25 / zoom;
       const startX = Math.max(0, Math.floor(state.playerPos.x - renderRange));
       const endX = Math.min(WORLD_SIZE, Math.ceil(state.playerPos.x + renderRange));
       const startY = Math.max(0, Math.floor(state.playerPos.y - renderRange));
@@ -110,187 +207,142 @@ export const GameCanvas: React.FC<Props> = ({ gameState, gameStateRef, mouseTarg
         for (let y = startY; y < endY; y++) {
           const s = toScreen(x, y, zoom, rotation);
           const tile = getTileType(x, y, state.playerStats.level);
-          ctx.fillStyle = tile === 'grass' ? '#166534' : (tile === 'sand' ? '#eab308' : (tile === 'water' ? '#1e40af' : (tile === 'snow_tile' ? '#f8fafc' : '#b45309')));
+          let color = '#166534';
+          if (tile === 'sand') color = '#ca8a04';
+          else if (tile === 'water') color = '#1e3a8a';
+          ctx.fillStyle = color;
           ctx.fillRect(s.x, s.y, TILE_WIDTH * zoom + 0.5, TILE_HEIGHT * zoom + 0.5);
         }
       }
 
-      // Draw Destination Marker
-      const target = mouseTargetRef.current;
-      if (target) {
-        const ts = toScreen(target.x, target.y, zoom, rotation);
-        const markerX = ts.x + (TILE_WIDTH * zoom) / 2;
-        const markerY = ts.y + (TILE_HEIGHT * zoom) / 2;
-        ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 3 * zoom;
-        const markerSize = (10 + Math.sin(now / 100) * 4) * zoom;
-        ctx.beginPath();
-        ctx.arc(markerX, markerY, markerSize, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(markerX, markerY, markerSize * 0.5, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+      // Projectiles
+      state.projectiles.forEach((proj: any) => {
+        const s = toScreen(proj.x, proj.y, zoom, rotation);
+        const centerX = s.x + (TILE_WIDTH * zoom) / 2;
+        const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
 
-      const entitiesToDraw = [...state.entities, { id: 'p', type: 'player', x: state.playerPos.x, y: state.playerPos.y, health: state.playerStats.health, maxHealth: state.playerStats.maxHealth } as any]
-        .filter(ent => Math.sqrt((ent.x - state.playerPos.x)**2 + (ent.y - state.playerPos.y)**2) < renderRange + 2)
+        if (proj.trail && proj.trail.length > 1) {
+          ctx.save();
+          const trailPoints = proj.trail.map((pt: any) => {
+            const sc = toScreen(pt.x, pt.y, zoom, rotation);
+            return { x: sc.x + (TILE_WIDTH * zoom) / 2, y: sc.y + (TILE_HEIGHT * zoom) / 2 };
+          });
+
+          ctx.beginPath();
+          ctx.moveTo(trailPoints[0].x, trailPoints[0].y);
+          for (let i = 1; i < trailPoints.length; i++) {
+            ctx.lineTo(trailPoints[i].x, trailPoints[i].y);
+          }
+          ctx.lineTo(centerX, centerY);
+
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.lineWidth = 1.2 * zoom;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.stroke();
+          
+          trailPoints.forEach((pt: any, idx: number) => {
+            const alpha = (idx / trailPoints.length) * 0.3;
+            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 1 * zoom, 0, Math.PI * 2);
+            ctx.fill();
+          });
+          
+          ctx.restore();
+        }
+
+        const angle = Math.atan2(proj.vy, proj.vx);
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(angle);
+        ctx.globalAlpha = 1.0;
+        ctx.font = `${24 * zoom}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('↗️', 0, 0);
+        ctx.restore();
+      });
+
+      const entitiesToDraw = [...state.entities, { id: 'p', type: 'player', x: state.playerPos.x, y: state.playerPos.y, health: state.playerStats.health } as any]
+        .filter(ent => Math.abs(ent.x - state.playerPos.x) < renderRange + 2 && Math.abs(ent.y - state.playerPos.y) < renderRange + 2)
         .sort((a,b) => a.y - b.y);
 
-      // Ensure entities are NOT transparent (globalAlpha = 1.0)
-      ctx.globalAlpha = 1.0;
-
       entitiesToDraw.forEach(ent => {
-        const prevHealth = lastHealths.current.get(ent.id);
-        if (prevHealth !== undefined && ent.health < prevHealth) {
-          spawnParticles(ent.x, ent.y);
-          hitJolts.current.set(ent.id, 0.4); 
-        }
-        lastHealths.current.set(ent.id, ent.health);
-
         const s = toScreen(ent.x, ent.y, zoom, rotation);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
         
-        let targetScale = 1;
-        let currentScale = visualScales.current.get(ent.id) ?? targetScale;
-        currentScale += (targetScale - currentScale) * 0.1; 
-        visualScales.current.set(ent.id, currentScale);
+        ctx.save();
+        ctx.globalAlpha = 1.0; 
 
-        let jolt = hitJolts.current.get(ent.id) ?? 0;
-        jolt *= 0.85;
-        if (jolt < 0.01) jolt = 0;
-        hitJolts.current.set(ent.id, jolt);
+        const isBuilding = ['tent', 'hut', 'workbench', 'watchtower', 'castle_gate'].includes(ent.type);
+        const isStatic = isBuilding || ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'road', 'bridge', 'stone_wall'].includes(ent.type);
+        
+        let shadowW = isStatic ? 8 * zoom : 14 * zoom;
+        let shadowH = isStatic ? 4 * zoom : 7 * zoom;
+        if (isBuilding) { shadowW *= 1.8; shadowH *= 1.8; }
 
-        const finalScale = currentScale * (1 - jolt); 
-
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.beginPath();
-        ctx.ellipse(centerX, centerY + 18*zoom, 12*zoom * finalScale, 6*zoom * finalScale, 0, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(0,0,0,0.15)'; 
+        ctx.beginPath(); 
+        ctx.ellipse(centerX, centerY + 18 * zoom, shadowW, shadowH, 0, 0, Math.PI * 2); 
         ctx.fill();
 
         if (ent.type === 'player') {
-          const stats = state.playerStats;
-          const isWalking = stats.isWalking;
-          const facing = stats.facing;
-          const hasAxe = stats.equippedItemId === 'axe';
-          const interactAge = now - stats.lastInteractTime;
-          const isSwinging = interactAge < 300;
-          const swingPhase = isSwinging ? Math.sin((interactAge / 300) * Math.PI) : 0;
-          const walkCycle = isWalking ? Math.sin(now / 100) : 0;
-          const armSwing = walkCycle * 6 * zoom;
-
-          ctx.save();
-          ctx.translate(centerX, centerY);
-          ctx.scale(finalScale, finalScale);
-
-          ctx.fillStyle = '#1c1917';
-          ctx.fillRect(-8*zoom, 8*zoom + (isWalking ? walkCycle*4*zoom : 0), 6*zoom, 10*zoom);
-          ctx.fillRect(2*zoom, 8*zoom + (isWalking ? -walkCycle*4*zoom : 0), 6*zoom, 10*zoom);
-
-          ctx.fillStyle = stats.character.outfitColor;
-          ctx.fillRect(-10*zoom, -10*zoom, 20*zoom, 20*zoom);
-
-          ctx.fillStyle = '#fde68a';
-          ctx.save();
-          ctx.translate(-12*zoom, -6*zoom);
-          if (isWalking) ctx.rotate(-armSwing * 0.1);
-          ctx.fillRect(-2*zoom, 0, 4*zoom, 12*zoom);
-          ctx.restore();
-
-          ctx.save();
-          ctx.translate(12*zoom, -6*zoom);
-          if (isSwinging) ctx.rotate(-Math.PI/2 - swingPhase * 1.5);
-          else if (isWalking) ctx.rotate(armSwing * 0.1);
-          ctx.fillRect(-2*zoom, 0, 4*zoom, 12*zoom);
+          drawPlayer(ctx, centerX, centerY, zoom, state.playerStats, now);
+        } else {
+          const icons: any = { tree_oak: '🌳', tree_pine: '🌲', tree_palm: '🌴', rock_standard: '🪨', rock_iron: '⛓️', bush_berry: '🌿', bush_flower: '🌺', bush_dry: '🌾', deer: '🦌', rabbit: '🐇', bear: '🐻', scorpion: '🦂', campfire: '🔥', tent: '⛺', workbench: '⚒️', hut: '🏠', watchtower: '🏰' };
+          const bounce = ['deer', 'rabbit', 'bear', 'scorpion'].includes(ent.type) ? Math.abs(Math.sin(now / 150)) * 2 * zoom : 0;
           
-          if (hasAxe) {
-            ctx.save();
-            ctx.translate(0, 10 * zoom);
-            ctx.fillStyle = '#4e342e';
-            ctx.fillRect(-1 * zoom, 0, 2 * zoom, 18 * zoom);
-            ctx.translate(0, 18 * zoom);
-            ctx.rotate(isSwinging ? swingPhase * 0.7 : 0);
-            ctx.fillStyle = '#90a4ae';
-            ctx.beginPath();
-            ctx.moveTo(-1 * zoom, 0); ctx.lineTo(8 * zoom, -4 * zoom);
-            ctx.lineTo(11 * zoom, 4 * zoom); ctx.lineTo(-1 * zoom, 8 * zoom);
-            ctx.closePath(); ctx.fill();
-            ctx.restore();
+          let entityFontSize = 42;
+          if (ent.type === 'tent') entityFontSize = 64;
+          if (ent.type === 'hut') entityFontSize = 80;
+          if (ent.type === 'watchtower') entityFontSize = 90;
+          if (ent.type === 'workbench') entityFontSize = 54;
+
+          ctx.save();
+          ctx.translate(centerX, centerY + 10 * zoom - bounce);
+          ctx.font = `${entityFontSize * zoom}px serif`; 
+          ctx.textAlign = 'center'; 
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(icons[ent.type] || '❓', 0, 0);
+          
+          if (ent.health < ent.maxHealth) {
+             const barW = 32 * zoom; const barH = 5 * zoom;
+             ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(-barW/2, 6*zoom, barW, barH);
+             ctx.fillStyle = '#22c55e'; ctx.fillRect(-barW/2, 6*zoom, barW * (ent.health / ent.maxHealth), barH);
           }
           ctx.restore();
-
-          ctx.fillStyle = '#fde68a';
-          ctx.beginPath();
-          ctx.arc(0, -20*zoom, 10*zoom, 0, Math.PI*2);
-          ctx.fill();
-
-          ctx.fillStyle = 'black';
-          const eyeSize = 1.5 * zoom;
-          let eyeOffsetX = 0, eyeOffsetY = 0;
-          if (facing === 'se') { eyeOffsetX = 3*zoom; eyeOffsetY = 1*zoom; }
-          else if (facing === 'sw') { eyeOffsetX = -3*zoom; eyeOffsetY = 1*zoom; }
-          else if (facing === 'ne') { eyeOffsetX = 3*zoom; eyeOffsetY = -2*zoom; }
-          else if (facing === 'nw') { eyeOffsetX = -3*zoom; eyeOffsetY = -2*zoom; }
-          ctx.beginPath();
-          ctx.arc(eyeOffsetX - 3*zoom, -21*zoom + eyeOffsetY, eyeSize, 0, Math.PI*2);
-          ctx.arc(eyeOffsetX + 3*zoom, -21*zoom + eyeOffsetY, eyeSize, 0, Math.PI*2);
-          ctx.fill();
-          ctx.restore();
-
-        } else {
-          const icons: any = { 
-            tree_oak: '🌳', tree_pine: '🌲', tree_palm: '🌴',
-            rock_standard: '🪨', rock_iron: '🌑',
-            bush_berry: '🌿', bush_flower: '🌺', bush_dry: '🍂',
-            well: '⛲', deer: '🦌', rabbit: '🐇', scorpion: '🦂', bear: '🐻',
-            campfire: '🔥', tent: '⛺', hut: '🏠', workbench: '⚒️'
-          };
-          
-          const isAnimal = ['deer', 'rabbit', 'scorpion', 'bear'].includes(ent.type);
-          const bounce = isAnimal ? Math.abs(Math.sin(now / 150)) * 1 * zoom : 0; 
-
-          ctx.save();
-          ctx.translate(centerX, centerY + 10*zoom - bounce);
-          ctx.scale(finalScale, finalScale);
-          ctx.font = `${48*zoom}px serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillStyle = '#FFFFFF'; // Ensure high contrast solid color for text/emoji
-          ctx.fillText(icons[ent.type] || '❓', 0, 0);
-          ctx.restore();
         }
+        ctx.restore();
       });
-
-      // Particles remain transparent
-      particles.current = particles.current.filter(p => {
-        p.life -= 0.02;
-        p.x += p.vx; p.y += p.vy; p.vy += 0.005;
-        const ps = toScreen(p.x, p.y, zoom, rotation);
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-        ctx.fillRect(ps.x, ps.y, p.size * zoom, p.size * zoom);
-        ctx.globalAlpha = 1.0;
-        return p.life > 0;
-      });
-
       ctx.restore();
 
-      // Vignette / Night layer
-      const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 100, canvas.width/2, canvas.height/2, canvas.width*0.9);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, `rgba(0,0,0,${0.5 + ambientAlpha*0.4})`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0,0, canvas.width, canvas.height);
+      const cycle = time / 2400;
+      let overlayAlpha = 0;
+      let overlayColor = '0, 0, 0';
+      if (cycle < 0.2 || cycle > 0.8) overlayAlpha = 0.4;
+      else if (cycle >= 0.2 && cycle < 0.35) { const p = (cycle - 0.2) / 0.15; overlayAlpha = 0.4 * (1 - p); overlayColor = '251, 146, 60'; }
+      else if (cycle >= 0.65 && cycle < 0.8) { const p = (cycle - 0.65) / 0.15; overlayAlpha = 0.4 * p; overlayColor = '107, 33, 168'; }
 
+      // Hit Vignette (Only for recent attacks)
+      const timeSinceHit = now - (state.playerStats.lastDamageTime || 0);
+      if (timeSinceHit < 800) {
+        const pulse = 0.5 * (1 - timeSinceHit / 800);
+        const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.width/4, canvas.width/2, canvas.height/2, canvas.width);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, `rgba(153, 27, 27, ${pulse})`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0,0, canvas.width, canvas.height);
+      }
+
+      ctx.fillStyle = `rgba(${overlayColor}, ${overlayAlpha})`;
+      ctx.fillRect(0,0, canvas.width, canvas.height);
       frameId = requestAnimationFrame(render);
     };
     render();
-    return () => { 
-      window.removeEventListener('resize', resize); 
-      cancelAnimationFrame(frameId); 
-    };
-  }, []); 
+    return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(frameId); };
+  }, [stars]); 
 
-  return <canvas ref={canvasRef} className="block w-full h-full cursor-crosshair" />;
+  return <canvas ref={canvasRef} className="block w-full h-full" />;
 };

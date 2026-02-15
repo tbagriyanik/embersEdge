@@ -3,7 +3,7 @@ import { Item, Recipe, PlayerStats, Language } from './types';
 
 export const TILE_WIDTH = 64;
 export const TILE_HEIGHT = 64; 
-export const WORLD_SIZE = 100; // Increased world size for more building
+export const WORLD_SIZE = 100; 
 
 export const TIME_SCALE = 0.02777; 
 export const SAVE_KEY = 'embers_edge_save_v5';
@@ -69,7 +69,28 @@ export const TRANSLATIONS: Record<Language, any> = {
     pan: "Pan Camera",
     zoom: "Zoom",
     quick_slots: "Quick Slots",
-    exit: "Exit"
+    exit: "Exit",
+    rest_tent: "Resting in tent... Zzz",
+    need_tent: "Need a tent to rest!",
+    drink_water: "Drinking fresh water...",
+    wood: "Log",
+    stone: "Stone",
+    iron: "Iron Ingots",
+    berry: "Berries",
+    meat_raw: "Raw Meat",
+    meat_cooked: "Steak",
+    axe: "Stone Axe",
+    pickaxe: "Pickaxe",
+    stone_sword: "Stone Sword",
+    iron_sword: "Iron Sword",
+    bow: "Bow",
+    arrow: "Arrows",
+    daytime: "DAYTIME",
+    nighttime: "NIGHTTIME",
+    active_gear: "ACTIVE GEAR",
+    repair: "REPAIR",
+    need_resources: "NEED RESOURCES",
+    broken: "BROKEN!"
   },
   tr: {
     new_game: "YENİ OYUN",
@@ -131,7 +152,28 @@ export const TRANSLATIONS: Record<Language, any> = {
     pan: "Kamerayı Kaydır",
     zoom: "Zoom",
     quick_slots: "Hızlı Slotlar",
-    exit: "Çıkış"
+    exit: "Çıkış",
+    rest_tent: "Çadırda dinleniliyor... Zzz",
+    need_tent: "Dinlenmek için çadır lazım!",
+    drink_water: "Taze su içiliyor...",
+    wood: "Odun",
+    stone: "Taş",
+    iron: "Demir Külçesi",
+    berry: "Böğürtlen",
+    meat_raw: "Çiğ Et",
+    meat_cooked: "Pişmiş Et",
+    axe: "Taş Balta",
+    pickaxe: "Kazma",
+    stone_sword: "Taş Kılıç",
+    iron_sword: "Demir Kılıç",
+    bow: "Yay",
+    arrow: "Ok",
+    daytime: "GÜNDÜZ",
+    nighttime: "GECE",
+    active_gear: "AKTİF EKİPMAN",
+    repair: "TAMİR ET",
+    need_resources: "KAYNAK YETERSİZ",
+    broken: "KIRILDI!"
   }
 };
 
@@ -153,7 +195,8 @@ export const INITIAL_STATS: PlayerStats = {
     outfitColor: '#451a03'
   },
   isWalking: false,
-  lastInteractTime: 0
+  lastInteractTime: 0,
+  lastDamageTime: 0
 };
 
 export const ITEMS: { [key: string]: Item } = {
@@ -163,11 +206,11 @@ export const ITEMS: { [key: string]: Item } = {
   berry: { id: 'berry', name: 'Berries', type: 'food', icon: '🫐', description: 'Sweet snack.', stackable: true, quantity: 0, maxStack: 99, effect: { hunger: 10, thirst: 5 } },
   meat_raw: { id: 'meat_raw', name: 'Raw Meat', type: 'food', icon: '🥩', description: 'Needs cooking.', stackable: true, quantity: 0, maxStack: 50, effect: { hunger: 5, health: -5 } },
   meat_cooked: { id: 'meat_cooked', name: 'Steak', type: 'food', icon: '🍖', description: 'Hearty meal.', stackable: true, quantity: 0, maxStack: 50, effect: { hunger: 40, health: 10 } },
-  axe: { id: 'axe', name: 'Stone Axe', type: 'tool', icon: '🪓', description: 'Chops trees.', stackable: false, quantity: 1, maxStack: 1 },
-  pickaxe: { id: 'pickaxe', name: 'Pickaxe', type: 'tool', icon: '⛏️', description: 'Mines rocks faster.', stackable: false, quantity: 1, maxStack: 1 },
-  stone_sword: { id: 'stone_sword', name: 'Stone Sword', type: 'weapon', icon: '🗡️', description: 'Basic defense.', stackable: false, quantity: 1, maxStack: 1, effect: { damage: 5 } },
-  iron_sword: { id: 'iron_sword', name: 'Iron Sword', type: 'weapon', icon: '⚔️', description: 'Strong weapon.', stackable: false, quantity: 1, maxStack: 1, effect: { damage: 12 } },
-  bow: { id: 'bow', name: 'Bow', type: 'weapon', icon: '🏹', description: 'Ranged hunting.', stackable: false, quantity: 1, maxStack: 1, effect: { damage: 8 } },
+  axe: { id: 'axe', name: 'Stone Axe', type: 'tool', icon: '🪓', description: 'Chops trees.', stackable: false, quantity: 1, maxStack: 1, durability: 120, maxDurability: 120 },
+  pickaxe: { id: 'pickaxe', name: 'Pickaxe', type: 'tool', icon: '⛏️', description: 'Mines rocks faster.', stackable: false, quantity: 1, maxStack: 1, durability: 120, maxDurability: 120 },
+  stone_sword: { id: 'stone_sword', name: 'Stone Sword', type: 'weapon', icon: '🗡️', description: 'Basic defense.', stackable: false, quantity: 1, maxStack: 1, durability: 400, maxDurability: 400, effect: { damage: 5 } },
+  iron_sword: { id: 'iron_sword', name: 'Iron Sword', type: 'weapon', icon: '⚔️', description: 'Strong weapon.', stackable: false, quantity: 1, maxStack: 1, durability: 1000, maxDurability: 1000, effect: { damage: 12 } },
+  bow: { id: 'bow', name: 'Bow', type: 'weapon', icon: '🏹', description: 'Ranged hunting.', stackable: false, quantity: 1, maxStack: 1, durability: 100, maxDurability: 100, effect: { damage: 8 } },
   arrow: { id: 'arrow', name: 'Arrows', type: 'resource', icon: '↗️', description: 'Ammunition.', stackable: true, quantity: 5, maxStack: 99 },
   campfire: { id: 'campfire', name: 'Campfire Kit', type: 'structure', icon: '🔥', description: 'Cooks raw meat.', stackable: true, quantity: 1, maxStack: 10 },
   tent: { id: 'tent', name: 'Tent Kit', type: 'structure', icon: '⛺', description: 'Sleep through night.', stackable: true, quantity: 1, maxStack: 5 },
@@ -180,27 +223,18 @@ export const ITEMS: { [key: string]: Item } = {
 };
 
 export const RECIPES: Recipe[] = [
-  // Level 1
   { id: 'craft_axe', name: 'Stone Axe', output: { ...ITEMS.axe }, ingredients: { wood: 5, stone: 3 }, levelRequired: 1 },
   { id: 'craft_campfire', name: 'Campfire', output: { ...ITEMS.campfire }, ingredients: { wood: 10, stone: 5 }, levelRequired: 1 },
   { id: 'craft_arrows', name: 'Arrows (5)', output: { ...ITEMS.arrow, quantity: 5 }, ingredients: { wood: 2, stone: 1 }, levelRequired: 1 },
-  
-  // Level 2
   { id: 'craft_stone_sword', name: 'Stone Sword', output: { ...ITEMS.stone_sword }, ingredients: { wood: 2, stone: 10 }, levelRequired: 2 },
   { id: 'craft_workbench', name: 'Workbench', output: { ...ITEMS.workbench, quantity: 1 }, ingredients: { wood: 15, stone: 8 }, levelRequired: 2 },
   { id: 'craft_tent', name: 'Tent', output: { ...ITEMS.tent }, ingredients: { wood: 15, stone: 5 }, levelRequired: 2 },
-  
-  // Level 3
   { id: 'craft_bow', name: 'Survival Bow', output: { ...ITEMS.bow }, ingredients: { wood: 12 }, levelRequired: 3, requiresWorkbench: true },
   { id: 'craft_pickaxe', name: 'Pickaxe', output: { ...ITEMS.pickaxe }, ingredients: { wood: 5, stone: 15 }, levelRequired: 3 },
   { id: 'craft_road', name: 'Stone Road', output: { ...ITEMS.road, quantity: 5 }, ingredients: { stone: 10 }, levelRequired: 3 },
-
-  // Level 5
   { id: 'craft_iron_sword', name: 'Iron Sword', output: { ...ITEMS.iron_sword }, ingredients: { wood: 5, stone: 10, iron: 15 }, levelRequired: 5, requiresWorkbench: true },
   { id: 'craft_bridge', name: 'Bridge', output: { ...ITEMS.bridge }, ingredients: { wood: 20, stone: 10 }, levelRequired: 5 },
   { id: 'craft_hut', name: 'Wooden Hut', output: { ...ITEMS.hut, quantity: 1 }, ingredients: { wood: 40, stone: 20 }, levelRequired: 5, requiresWorkbench: true },
-
-  // Level 10+
   { id: 'craft_wall', name: 'Stone Wall', output: { ...ITEMS.stone_wall, quantity: 2 }, ingredients: { stone: 20 }, levelRequired: 10 },
   { id: 'craft_tower', name: 'Watchtower', output: { ...ITEMS.watchtower }, ingredients: { wood: 50, stone: 50, iron: 10 }, levelRequired: 15, requiresWorkbench: true },
 ];

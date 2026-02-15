@@ -21,6 +21,8 @@ export interface Item {
   stackable: boolean;
   quantity: number;
   maxStack?: number;
+  durability?: number;
+  maxDurability?: number;
   effect?: {
     hunger?: number;
     thirst?: number;
@@ -58,6 +60,9 @@ export interface Entity {
   targetY?: number;
   isFleeing?: boolean;
   spawnTime?: number;
+  aiState?: 'idle' | 'grazing' | 'fleeing' | 'prowling' | 'hunting' | 'attacking';
+  lastAiTick?: number;
+  attackCooldown?: number;
 }
 
 export interface Projectile {
@@ -69,6 +74,7 @@ export interface Projectile {
   damage: number;
   ownerId: string;
   life: number;
+  trail?: { x: number; y: number }[];
 }
 
 export interface CharacterConfig {
@@ -92,6 +98,7 @@ export interface PlayerStats {
   character: CharacterConfig;
   isWalking: boolean;
   lastInteractTime: number;
+  lastDamageTime: number; // New: To handle invincibility frames
 }
 
 export interface GameSettings {
