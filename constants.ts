@@ -86,6 +86,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     stone: "Stone",
     iron: "Iron Ingots",
     berry: "Berries",
+    berry_cooked: "Berry Tart",
     meat_raw: "Raw Meat",
     meat_cooked: "Steak",
     axe: "Stone Axe",
@@ -100,7 +101,12 @@ export const TRANSLATIONS: Record<Language, any> = {
     repair: "REPAIR",
     need_resources: "NEED RESOURCES",
     broken: "BROKEN!",
-    danger: "DANGER!"
+    danger: "DANGER!",
+    radar: "RADAR",
+    need_raw_food: "Need raw food!",
+    out_of_arrows: "Out of arrows!",
+    workbench_ready: "Workbench ready!",
+    new_day: "A NEW DAY BEGINS..."
   },
   tr: {
     new_game: "YENİ OYUN",
@@ -177,6 +183,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     stone: "Taş",
     iron: "Demir Külçesi",
     berry: "Böğürtlen",
+    berry_cooked: "Meyveli Kek",
     meat_raw: "Çiğ Et",
     meat_cooked: "Pişmiş Et",
     axe: "Taş Balta",
@@ -191,7 +198,12 @@ export const TRANSLATIONS: Record<Language, any> = {
     repair: "TAMİR ET",
     need_resources: "KAYNAK YETERSİZ",
     broken: "KIRILDI!",
-    danger: "TEHLİKE!"
+    danger: "TEHLİKE!",
+    radar: "RADAR",
+    need_raw_food: "Pişirilecek yiyecek yok!",
+    out_of_arrows: "Ok kalmadı!",
+    workbench_ready: "Tezgah hazır!",
+    new_day: "YENİ BİR GÜN BAŞLIYOR..."
   }
 };
 
@@ -223,6 +235,7 @@ export const ITEMS: { [key: string]: Item } = {
   stone: { id: 'stone', name: 'Stone', type: 'resource', icon: '🪨', description: 'Hard granite.', stackable: true, quantity: 0, maxStack: 99 },
   iron: { id: 'iron', name: 'Iron Ingots', type: 'resource', icon: '⛓️', description: 'Refined iron.', stackable: true, quantity: 0, maxStack: 99 },
   berry: { id: 'berry', name: 'Berries', type: 'food', icon: '🫐', description: 'Sweet snack.', stackable: true, quantity: 0, maxStack: 99, effect: { hunger: 10, thirst: 5 } },
+  berry_cooked: { id: 'berry_cooked', name: 'Berry Tart', type: 'food', icon: '🥧', description: 'Sweet and filling.', stackable: true, quantity: 0, maxStack: 50, effect: { hunger: 25, health: 10 } },
   meat_raw: { id: 'meat_raw', name: 'Raw Meat', type: 'food', icon: '🥩', description: 'Needs cooking.', stackable: true, quantity: 0, maxStack: 50, effect: { hunger: 5, health: -5 } },
   meat_cooked: { id: 'meat_cooked', name: 'Steak', type: 'food', icon: '🍖', description: 'Hearty meal.', stackable: true, quantity: 0, maxStack: 50, effect: { hunger: 40, health: 10 } },
   axe: { id: 'axe', name: 'Stone Axe', type: 'tool', icon: '🪓', description: 'Chops trees.', stackable: false, quantity: 1, maxStack: 1, durability: 1500, maxDurability: 1500 },

@@ -348,7 +348,7 @@ const App: React.FC = () => {
 
       if (target.type === 'workbench') {
         setUiState(s => ({ ...s, inventoryOpen: true }));
-        showMessage('Repair Workbench ready!', true);
+        showMessage('workbench_ready');
         return prev;
       }
 
@@ -366,11 +366,15 @@ const App: React.FC = () => {
       }
 
       if (target.type === 'campfire') {
-         const rawIdx = prev.inventory.findIndex((i: Item) => i.id === 'meat_raw');
-         if (rawIdx > -1) {
-            SoundManager.playGather('bush_berry'); showMessage('meat_cooked');
-            let ni = [...prev.inventory]; ni[rawIdx].quantity -= 1;
-            if (ni[rawIdx].quantity <= 0) ni.splice(rawIdx, 1);
+         const rawMeatIdx = prev.inventory.findIndex((i: Item) => i.id === 'meat_raw');
+         const berryIdx = prev.inventory.findIndex((i: Item) => i.id === 'berry');
+         
+         if (rawMeatIdx > -1) {
+            SoundManager.playGather('bush_berry'); 
+            showMessage('meat_cooked');
+            let ni = [...prev.inventory]; 
+            ni[rawMeatIdx].quantity -= 1;
+            if (ni[rawMeatIdx].quantity <= 0) ni.splice(rawMeatIdx, 1);
             
             if (canCarryItem('meat_cooked', 1, ni)) {
                 ni = addItemsToInventory('meat_cooked', 1, ni);
@@ -379,7 +383,24 @@ const App: React.FC = () => {
                 showMessage('inv_full');
                 return prev;
             }
-         } else { showMessage('Need Raw Meat!', true); return prev; }
+         } else if (berryIdx > -1) {
+            SoundManager.playGather('bush_berry'); 
+            showMessage('berry_cooked');
+            let ni = [...prev.inventory]; 
+            ni[berryIdx].quantity -= 1;
+            if (ni[berryIdx].quantity <= 0) ni.splice(berryIdx, 1);
+            
+            if (canCarryItem('berry_cooked', 1, ni)) {
+                ni = addItemsToInventory('berry_cooked', 1, ni);
+                return { ...prev, inventory: ni };
+            } else {
+                showMessage('inv_full');
+                return prev;
+            }
+         } else { 
+            showMessage('need_raw_food'); 
+            return prev; 
+         }
       }
 
       SoundManager.playGather(target.type, prev.playerStats.equippedItemId);
@@ -453,7 +474,7 @@ const App: React.FC = () => {
     const state = gameStateRef.current;
     const nearestAnimal = state.entities.find((e: Entity) => ['deer', 'rabbit', 'bear', 'scorpion', 'crab'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.8);
     if (nearestAnimal) { executeInteraction(nearestAnimal.id); return; }
-    const nearestObj = state.entities.find((e: Entity) => !['deer', 'rabbit', 'bear', 'scorpion', 'crab', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.6);
+    const nearestObj = state.entities.find((e: any) => !['deer', 'rabbit', 'bear', 'scorpion', 'crab', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.6);
     if (nearestObj) { executeInteraction(nearestObj.id); return; } 
     let nearWater = false;
     for (let dx = -1.2; dx <= 1.2; dx += 0.4) {
@@ -463,14 +484,15 @@ const App: React.FC = () => {
       if (nearWater) break;
     }
     if (nearWater) { triggerDrink(); return; }
-    // Boşta iken dinlenme uyarısını önlemek için buradaki triggerRest kaldırıldı.
+    // Boşta iken dinlenme uyarısını önlemek için triggerRest() çağrısı kaldırıldı.
   }, [executeInteraction, triggerDrink, isPaused]);
 
+  // Fix: Removed incorrect explicit types and casts in setGameState by using : any or omitting to preserve extended state properties
   const handleHUDAction = useCallback((action: 'use' | 'reorder' | 'equip' | 'repair' | 'repair_all', data: any) => {
     if (action === 'use' || action === 'equip') {
        const item = data as Item;
        if (item.type === 'food') {
-          setGameState(prev => {
+          setGameState((prev: any) => {
             const idx = prev.inventory.findIndex((i: Item) => i.id === item.id);
             if (idx === -1) return prev;
             const updatedInv = [...prev.inventory];
@@ -491,10 +513,10 @@ const App: React.FC = () => {
           SoundManager.playGather('bush_berry');
        } else if (item.type === 'tool' || item.type === 'weapon') {
           SoundManager.playUI('equip');
-          setGameState(prev => ({ ...prev, playerStats: { ...prev.playerStats, equippedItemId: prev.playerStats.equippedItemId === item.id ? null : item.id } }));
+          setGameState((prev: any) => ({ ...prev, playerStats: { ...prev.playerStats, equippedItemId: prev.playerStats.equippedItemId === item.id ? null : item.id } }));
        }
     } else if (action === 'reorder') {
-       setGameState(prev => {
+       setGameState((prev: any) => {
           const { fromIdx, toIdx } = data;
           const ni = [...prev.inventory]; const it = ni[fromIdx];
           ni.splice(fromIdx, 1); ni.splice(toIdx, 0, it);
@@ -502,7 +524,7 @@ const App: React.FC = () => {
        });
     } else if (action === 'repair') {
       const itemToRepair = data as Item;
-      setGameState(prev => {
+      setGameState((prev: any) => {
         let ni = [...prev.inventory];
         const totalWood = ni.filter((i: Item) => i.id === 'wood').reduce((sum: number, i: Item) => sum + i.quantity, 0);
         const totalStone = ni.filter((i: Item) => i.id === 'stone').reduce((sum: number, i: Item) => sum + i.quantity, 0);
@@ -535,7 +557,7 @@ const App: React.FC = () => {
         return prev;
       });
     } else if (action === 'repair_all') {
-      setGameState(prev => {
+      setGameState((prev: any) => {
         let ni = [...prev.inventory];
         const totalWood = ni.filter((i: Item) => i.id === 'wood').reduce((sum: number, i: Item) => sum + i.quantity, 0);
         const totalStone = ni.filter((i: Item) => i.id === 'stone').reduce((sum: number, i: Item) => sum + i.quantity, 0);
@@ -659,10 +681,20 @@ const App: React.FC = () => {
     velocity.current.x *= Math.max(0, 1 - friction * dt);
     velocity.current.y *= Math.max(0, 1 - friction * dt);
     
+    // Daily Respawn and state preservation
     setGameState(prev => {
       const now = Date.now();
       const isCurrentlyResting = isRestingRef.current;
       
+      let nextTime = (prev.time + 0.1) % 2400;
+      let respawnedEntities: Entity[] = [];
+      
+      // Detected Midnight wrap-around
+      if (nextTime < prev.time) {
+         respawnedEntities = spawnEntities(50);
+         showMessage('new_day');
+      }
+
       let nextWeather = { ...prev.weather };
       if (nextWeather.type !== targetWeather.current) {
         nextWeather.intensity = Math.max(0, nextWeather.intensity - dt * 0.2);
@@ -708,7 +740,7 @@ const App: React.FC = () => {
       let playerHealthMod = 0;
       let animalAttackTriggered = false;
 
-      const nextEntities = prev.entities.map((ent: Entity) => {
+      const nextEntities = [...prev.entities, ...respawnedEntities].map((ent: Entity) => {
         if (['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'tent', 'workbench', 'hut', 'bridge', 'road', 'stone_wall', 'watchtower', 'castle_gate'].includes(ent.type)) return ent;
         const distToPlayer = Math.sqrt((ent.x - prev.playerPos.x)**2 + (ent.y - prev.playerPos.y)**2);
         let newX = ent.x; let newY = ent.y; let newState = ent.aiState || 'idle'; let targetX = ent.targetX; let targetY = ent.targetY; let attackCooldown = (ent.attackCooldown || 0) - dt;
@@ -775,7 +807,7 @@ const App: React.FC = () => {
         return { ...finalState, isDead: true, playerStats: { ...prev.playerStats, health: 0 } };
       }
 
-      return { ...finalState, playerPos: { x: finalX, y: finalY }, entities: updatedEntities, playerStats: { ...finalState.playerStats, health: Math.min(prev.playerStats.maxHealth, nextHealth), lastDamageTime: lastDmgTime, lastCombatDamageTime: lastCombatTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, finalState.playerStats.hunger - hungerDrain), thirst: Math.max(0, finalState.playerStats.thirst - thirstDrain) }, time: (prev.time + 0.1) % 2400 };
+      return { ...finalState, playerPos: { x: finalX, y: finalY }, entities: updatedEntities, playerStats: { ...finalState.playerStats, health: Math.min(prev.playerStats.maxHealth, nextHealth), lastDamageTime: lastDmgTime, lastCombatDamageTime: lastCombatTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, finalState.playerStats.hunger - hungerDrain), thirst: Math.max(0, finalState.playerStats.thirst - thirstDrain) }, time: nextTime };
     });
     requestRef.current = requestAnimationFrame(update);
   }, [isResting, uiState, executeInteraction, triggerDrink, handleEntityDeath, isPaused, canCarryItem, showMessage]);
@@ -787,9 +819,9 @@ const App: React.FC = () => {
       const key = e.key.toLowerCase(); if (key === 'f') setUiState(prev => ({ ...prev, inventoryOpen: !prev.inventoryOpen, craftingOpen: false, settingsOpen: false })); if (key === 'c') setUiState(prev => ({ ...prev, craftingOpen: !prev.craftingOpen, inventoryOpen: false, settingsOpen: false })); if (key === 'escape') { if (uiState.craftingOpen || uiState.inventoryOpen || uiState.settingsOpen) setUiState(prev => ({ ...prev, craftingOpen: false, inventoryOpen: false, settingsOpen: false })); else setGameState(g => ({ ...g, gameStarted: false })); return; }
       if (isPaused) return;
       activeKeys.current.add(key); const numKey = parseInt(key); if (!isNaN(numKey) && numKey >= 1 && numKey <= 9) { 
-        const itemsToUse = gameStateRef.current.inventory.filter((i: Item) => ['tool', 'weapon', 'food'].includes(i.type));
+        const itemsToUse = (gameStateRef.current.inventory as Item[]).filter((i: Item) => ['tool', 'weapon', 'food'].includes(i.type));
         const uniqueItems: Item[] = [];
-        const seenIds = new Set();
+        const seenIds = new Set<string>();
         itemsToUse.forEach((i: Item) => {
            if (!seenIds.has(i.id)) {
              seenIds.add(i.id);
@@ -813,7 +845,7 @@ const App: React.FC = () => {
         if (!worldPos) return;
 
         if (state.playerStats.equippedItemId === 'bow') {
-          const arrowIdx = state.inventory.findIndex((i: Item) => i.id === 'arrow');
+          const arrowIdx = (state.inventory as Item[]).findIndex((i: Item) => i.id === 'arrow');
           if (arrowIdx > -1) {
             const adx = worldPos.x - state.playerPos.x; const ady = worldPos.y - state.playerPos.y; const adist = Math.sqrt(adx*adx + ady*ady);
             if (adist > 0.1) {
@@ -824,10 +856,10 @@ const App: React.FC = () => {
               });
               SoundManager.playToolAction('bow'); return;
             }
-          } else { showMessage('Out of arrows!', true); }
+          } else { showMessage('out_of_arrows'); }
         }
         
-        const clickedEntity = state.entities.find((ent: Entity) => Math.sqrt((ent.x - worldPos.x)**2 + (ent.y - worldPos.y)**2) < 2.0);
+        const clickedEntity = (state.entities as Entity[]).find((ent: Entity) => Math.sqrt((ent.x - worldPos.x)**2 + (ent.y - worldPos.y)**2) < 2.0);
         if (clickedEntity) { 
           const mdist = Math.sqrt((clickedEntity.x - state.playerPos.x)**2 + (clickedEntity.y - state.playerPos.y)**2); 
           if (mdist < 1.8) {
@@ -860,7 +892,7 @@ const App: React.FC = () => {
     return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(1200), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: { ...INITIAL_STATS, character: prev.playerStats.character } })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
   }
 
-  const isNearWorkbench = !!gameState.entities.find((e: Entity) => e.type === 'workbench' && Math.sqrt((e.x - gameState.playerPos.x)**2 + (e.y - gameState.playerPos.y)**2) < 2.5);
+  const isNearWorkbench = !!(gameState.entities as Entity[]).find((e: Entity) => e.type === 'workbench' && Math.sqrt((e.x - gameState.playerPos.x)**2 + (e.y - gameState.playerPos.y)**2) < 2.5);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-stone-950">
@@ -886,7 +918,7 @@ const App: React.FC = () => {
       <HUD stats={gameState.playerStats} time={gameState.time} message={uiState.message} gameState={gameState} onAction={handleHUDAction} onZoom={() => {}} onRotate={() => {}} onOpenSettings={() => setUiState(s => ({ ...s, settingsOpen: true, inventoryOpen: false, craftingOpen: false }))} />
       
       <div className="absolute top-6 right-6 pointer-events-none z-50 flex flex-col items-end gap-6">
-        <Minimap playerPos={gameState.playerPos} entities={gameState.entities} playerStats={gameState.playerStats} />
+        <Minimap playerPos={gameState.playerPos} entities={gameState.entities} playerStats={gameState.playerStats} language={gameState.settings.language} />
       </div>
 
       {uiState.inventoryOpen && <Inventory items={gameState.inventory} equippedItemId={gameState.playerStats.equippedItemId} isNearWorkbench={isNearWorkbench} onAction={handleHUDAction} onClose={() => setUiState(s => ({...s, inventoryOpen: false}))} onSwitchToCrafting={() => setUiState(s => ({...s, inventoryOpen: false, craftingOpen: true}))} language={gameState.settings.language} />}

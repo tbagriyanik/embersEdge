@@ -1,19 +1,21 @@
 
 import React, { useRef, useEffect } from 'react';
-import { Entity, PlayerStats, TileType } from '../types';
-import { WORLD_SIZE } from '../constants';
+import { Entity, PlayerStats, TileType, Language } from '../types';
+import { WORLD_SIZE, TRANSLATIONS } from '../constants';
 import { getTileType } from '../App';
 
 interface Props {
   playerPos: { x: number; y: number };
   entities: Entity[];
   playerStats: PlayerStats;
+  language: Language;
 }
 
-export const Minimap: React.FC<Props> = ({ playerPos, entities, playerStats }) => {
+export const Minimap: React.FC<Props> = ({ playerPos, entities, playerStats, language }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapSize = 140; 
   const viewRadius = 35; // Görüş çapı büyütüldü
+  const t = (key: string) => TRANSLATIONS[language][key] || key;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -128,7 +130,7 @@ export const Minimap: React.FC<Props> = ({ playerPos, entities, playerStats }) =
         />
       </div>
       <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-[7px] font-black text-white/70 uppercase tracking-widest shadow-lg">
-        Radar
+        {t('radar')}
       </div>
     </div>
   );

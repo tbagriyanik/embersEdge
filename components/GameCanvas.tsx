@@ -100,16 +100,14 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     const lastInteract = stats.lastInteractTime || 0;
     const isInteracting = (now - lastInteract) < 400;
 
-    const timeSinceCombatHit = now - (stats.lastCombatDamageTime || 0);
-    const isRecentlyCombatHit = timeSinceCombatHit < 800;
-    
     const swing = isWalking ? Math.sin(now / 100) * 0.4 : 0;
     const bob = isWalking ? Math.abs(Math.sin(now / 100)) * 2 * zoom : 0;
 
     ctx.save();
     ctx.translate(x, y - bob);
 
-    const currentBodyColor = isRecentlyCombatHit && Math.sin(now / 50) > 0 ? '#b91c1c' : outfitColor;
+    // Yanıp sönme efekti kaldırıldı - her zaman outfit rengi kullanılıyor
+    const currentBodyColor = outfitColor;
     
     ctx.fillStyle = currentBodyColor;
     if (gender === 'male') {
@@ -314,7 +312,7 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         const isBuilding = ['tent', 'hut', 'workbench', 'watchtower', 'castle_gate'].includes(ent.type);
         const isStatic = isBuilding || ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'road', 'bridge', 'stone_wall'].includes(ent.type);
         
-        // Çok daha koyu ve belirgin gölgeler
+        // Çok daha koyu ve belirgin gölgeler (rgba 0.5'ten 0.6'ya çekildi)
         ctx.fillStyle = 'rgba(0,0,0,0.6)'; 
         let shadowW = isStatic ? 8 * zoom : 14 * zoom;
         let shadowH = isStatic ? 4 * zoom : 7 * zoom;
@@ -335,7 +333,7 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
           ctx.save();
           ctx.translate(centerX, centerY + 10 * zoom - bounce);
           
-          // Tam Opaklık Sabitlendi
+          // Tam Opaklık Sabitlendi - Artık mesafe farketmeksizin opak
           ctx.globalAlpha = 1.0; 
           
           ctx.font = `${entityFontSize * zoom}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
