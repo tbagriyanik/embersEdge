@@ -7,7 +7,7 @@ import { getTileType } from '../App';
 interface Props {
   gameState: GameState & { 
     birds: {x: number, y: number, vx: number, vy: number, flap: number}[],
-    ripples: {x: number, y: number, startTime: number}[],
+    ripples: {id: string, x: number, y: number, startTime: number}[],
     particles: {id: string, x: number, y: number, vx: number, vy: number, life: number, color: string, size: number, type?: string}[],
     shake: number,
     isRecentlyAttackedByAnimal: boolean
@@ -106,7 +106,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     ctx.save();
     ctx.translate(x, y - bob);
 
-    // Yanıp sönme efekti kaldırıldı - her zaman outfit rengi kullanılıyor
     const currentBodyColor = outfitColor;
     
     ctx.fillStyle = currentBodyColor;
@@ -246,7 +245,33 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         }
       }
 
-      state.particles.forEach((p: any) => {
+      // Draw Ripples
+      state.ripples?.forEach((r: any) => {
+        const s = toScreen(r.x, r.y, zoom, rotation);
+        const centerX = s.x + (TILE_WIDTH * zoom) / 2;
+        const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
+        const elapsed = now - r.startTime;
+        const progress = Math.min(1, elapsed / 1000);
+        
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, (10 + progress * 50) * zoom, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.4 * (1 - progress)})`;
+        ctx.lineWidth = 2 * zoom;
+        ctx.stroke();
+        
+        // Second inner ripple
+        if (progress > 0.3) {
+           const p2 = (progress - 0.3) / 0.7;
+           ctx.beginPath();
+           ctx.arc(centerX, centerY, (5 + p2 * 30) * zoom, 0, Math.PI * 2);
+           ctx.strokeStyle = `rgba(255, 255, 255, ${0.2 * (1 - p2)})`;
+           ctx.stroke();
+        }
+        ctx.restore();
+      });
+
+      state.particles?.forEach((p: any) => {
         const s = toScreen(p.x, p.y, zoom, rotation);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
@@ -261,7 +286,7 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         ctx.restore();
       });
 
-      state.projectiles.forEach((proj: any) => {
+      state.projectiles?.forEach((proj: any) => {
         const s = toScreen(proj.x, proj.y, zoom, rotation);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
@@ -312,7 +337,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         const isBuilding = ['tent', 'hut', 'workbench', 'watchtower', 'castle_gate'].includes(ent.type);
         const isStatic = isBuilding || ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'road', 'bridge', 'stone_wall'].includes(ent.type);
         
-        // Çok daha koyu ve belirgin gölgeler (rgba 0.5'ten 0.6'ya çekildi)
         ctx.fillStyle = 'rgba(0,0,0,0.6)'; 
         let shadowW = isStatic ? 8 * zoom : 14 * zoom;
         let shadowH = isStatic ? 4 * zoom : 7 * zoom;
@@ -333,7 +357,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
           ctx.save();
           ctx.translate(centerX, centerY + 10 * zoom - bounce);
           
-          // Tam Opaklık Sabitlendi - Artık mesafe farketmeksizin opak
           ctx.globalAlpha = 1.0; 
           
           ctx.font = `${entityFontSize * zoom}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';

@@ -314,6 +314,7 @@ const App: React.FC = () => {
 
     setGameState((prev: any) => {
       const now = Date.now();
+      const perfNow = performance.now();
       let nextT = (prev.time + 0.1) % 2400;
       let respawned: Entity[] = []; if (nextT < prev.time) { respawned = spawnEntities(50); showMessage('new_day'); }
       
@@ -322,6 +323,7 @@ const App: React.FC = () => {
       else nextWeather.intensity = Math.min(1.0, nextWeather.intensity + dt * 0.2);
 
       const nextProjectiles = prev.projectiles.map((p: any) => ({ ...p, x: p.x + p.vx * dt, y: p.y + p.vy * dt, life: p.life - dt })).filter((p: any) => p.life > 0);
+      const nextRipples = (prev.ripples || []).filter((r: any) => perfNow - r.startTime < 1000);
       let pHealthMod = 0; let attacked = false;
 
       const nextEntities = [...prev.entities, ...respawned].map(ent => {
@@ -352,7 +354,7 @@ const App: React.FC = () => {
       let facing = prev.playerStats.facing;
       if (dx !== 0 || dy !== 0) { const a = Math.atan2(dy, dx); if (a >= -Math.PI/4 && a < Math.PI/4) facing = 'se'; else if (a >= Math.PI/4 && a < 3*Math.PI/4) facing = 'sw'; else if (a >= 3*Math.PI/4 || a < -3*Math.PI/4) facing = 'nw'; else facing = 'ne'; }
 
-      return { ...prev, playerPos: { x: fX, y: fY }, entities: updatedEnts, projectiles: nextProjectiles, weather: nextWeather, playerStats: { ...prev.playerStats, facing, health: Math.min(prev.playerStats.maxHealth, nH), lastDamageTime: pHealthMod < 0 ? now : prev.playerStats.lastDamageTime, lastCombatDamageTime: attacked ? now : prev.playerStats.lastCombatDamageTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, prev.playerStats.hunger - 0.0007), thirst: Math.max(0, prev.playerStats.thirst - 0.0010) }, time: nextT };
+      return { ...prev, playerPos: { x: fX, y: fY }, entities: updatedEnts, projectiles: nextProjectiles, ripples: nextRipples, weather: nextWeather, playerStats: { ...prev.playerStats, facing, health: Math.min(prev.playerStats.maxHealth, nH), lastDamageTime: pHealthMod < 0 ? now : prev.playerStats.lastDamageTime, lastCombatDamageTime: attacked ? now : prev.playerStats.lastCombatDamageTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, prev.playerStats.hunger - 0.0007), thirst: Math.max(0, prev.playerStats.thirst - 0.0010) }, time: nextT };
     });
     requestRef.current = requestAnimationFrame(update);
   }, [showMessage, executeInteraction, triggerDrink]);
@@ -403,6 +405,14 @@ const App: React.FC = () => {
       }
       const wp = screenToWorld(e.clientX, e.clientY); if (!wp) return;
       
+      // Ripple Effect on Water
+      if (getTileType(wp.x, wp.y) === 'water') {
+        setGameState((prev: any) => ({
+          ...prev,
+          ripples: [...(prev.ripples || []), { id: `ripple-${Date.now()}-${Math.random()}`, x: wp.x, y: wp.y, startTime: performance.now() }]
+        }));
+      }
+
       if (gameStateRef.current.playerStats.equippedItemId === 'bow') {
         const arrowIdx = (gameStateRef.current.inventory as Item[]).findIndex(i => i.id === 'arrow');
         if (arrowIdx > -1) {
