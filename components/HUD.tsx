@@ -19,14 +19,45 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
   const minutes = Math.floor(((time / 2400) * 24 * 60) % 60);
   const t = (key: string) => TRANSLATIONS[gameState.settings.language][key] || key;
 
-  const usableItems = gameState.inventory.filter(i => ['tool', 'weapon', 'food'].includes(i.type));
-  const resources = gameState.inventory.filter(i => ['resource', 'material'].includes(i.type));
+  const getUniqueItems = (types: string[]) => {
+    const items = gameState.inventory.filter(i => types.includes(i.type));
+    const uniqueMap = new Map<string, { item: Item, total: number, hasOverflow: boolean, maxStack: number }>();
+    
+    items.forEach(i => {
+      const existing = uniqueMap.get(i.id);
+      if (!existing) {
+        uniqueMap.set(i.id, { 
+          item: i, 
+          total: i.quantity, 
+          hasOverflow: false,
+          maxStack: i.maxStack || 99
+        });
+      } else {
+        const updatedTotal = (existing.total || 0) + i.quantity;
+        uniqueMap.set(i.id, { 
+          ...existing, 
+          total: updatedTotal, 
+          hasOverflow: updatedTotal > (existing.maxStack || 99) 
+        });
+      }
+    });
+    return Array.from(uniqueMap.values());
+  };
+
+  const usableItems = getUniqueItems(['tool', 'weapon', 'food']);
+  const resources = getUniqueItems(['resource', 'material']);
 
   const weatherIcons: Record<string, string> = {
     clear: '☀️',
     rain: '🌧️',
     fog: '🌫️',
     snow: '❄️'
+  };
+
+  const formatQuantity = (total: number, maxStack: number) => {
+    if (total > 99) return '99+';
+    if (total > 50 && maxStack <= 50) return '50+';
+    return total.toString();
   };
 
   const StatBar = ({ label, value, max, color, icon, critical }: any) => {
@@ -55,12 +86,10 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
   return (
     <div className="absolute inset-x-0 top-0 bottom-0 p-4 sm:p-6 pointer-events-none select-none flex flex-col justify-between z-50">
       <div className="flex justify-between items-start">
-        {/* Top Left Stats & Weather - Glass Panel */}
         <div 
           onMouseDown={e => e.stopPropagation()} 
           className="p-4 bg-black/30 backdrop-blur-2xl border border-white/20 rounded-[2rem] flex flex-col gap-3 shadow-2xl pointer-events-auto"
         >
-          {/* Time & Level */}
           <div className="flex items-center gap-4 px-1 mb-1 border-b border-white/10 pb-3">
              <div className="flex flex-col">
                <span className="text-xl sm:text-2xl font-black text-white leading-none tracking-tighter">
@@ -82,14 +111,12 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
              </div>
           </div>
           
-          {/* Status Bars */}
           <div className="flex flex-col gap-2 px-1">
             <StatBar label={t('health')} value={stats.health} max={stats.maxHealth} color="bg-red-500" icon="❤️" critical={stats.health < 25} />
             <StatBar label={t('hunger')} value={stats.hunger} max={stats.maxHunger} color="bg-orange-500" icon="🍖" critical={stats.hunger < 20} />
             <StatBar label={t('thirst')} value={stats.thirst} max={stats.maxThirst} color="bg-sky-500" icon="💧" critical={stats.thirst < 20} />
           </div>
 
-          {/* Weather - Directly Under Thirst Bar */}
           <div className="mt-1 px-2 flex items-center gap-3 bg-white/5 py-2 rounded-xl border border-white/5 backdrop-blur-md">
              <span className="text-xl">{weatherIcons[gameState.weather.type] || '☀️'}</span>
              <span className="text-[9px] sm:text-[12px] font-black text-white/60 uppercase tracking-widest">{t(gameState.weather.type)}</span>
@@ -97,26 +124,26 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
         </div>
       </div>
 
-      {/* Materials Panel - Middle Right - Glass Effect */}
       <div className="fixed right-4 sm:right-6 top-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-auto">
-        <div className="p-3 sm:p-4 bg-black/30 backdrop-blur-2xl border border-white/20 rounded-[2rem] flex flex-col gap-3 shadow-2xl max-h-[60vh] overflow-hidden">
+        <div className="p-3 sm:p-4 bg-black/30 backdrop-blur-2xl border border-white/20 rounded-[2.5rem] flex flex-col gap-3 shadow-2xl max-h-[60vh] overflow-hidden">
           <span className="text-[9px] sm:text-[12px] font-black text-white/40 uppercase tracking-[0.2em] text-center mb-1">Stock</span>
           <div className="flex flex-col gap-2.5 overflow-y-auto pr-1.5 custom-scrollbar">
-            {resources.length > 0 ? resources.map(item => (
-              <div key={item.id} className="relative w-12 h-12 sm:w-14 sm:h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center group hover:bg-white/15 transition-all">
+            {resources.length > 0 ? resources.map(({item, total, maxStack}) => (
+              <div key={item.id} className="relative w-12 h-12 sm:w-14 sm:h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center group hover:bg-white/15 transition-all shadow-lg">
                 <span className="text-2xl sm:text-3xl group-hover:scale-110 transition-transform">{item.icon}</span>
-                <span className="absolute bottom-1 right-1 bg-amber-500 border border-stone-900 rounded-lg px-1.5 py-0.5 text-[9px] sm:text-[12px] font-black text-stone-950 shadow-xl">{item.quantity}</span>
+                <span className="absolute -bottom-1 -right-1 bg-amber-500 border border-stone-900 rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-[8px] sm:text-[10px] font-black text-stone-950 shadow-xl leading-none">
+                  {formatQuantity(total, maxStack)}
+                </span>
               </div>
             )) : (
-              <div className="w-12 h-12 border border-white/10 border-dashed rounded-2xl flex items-center justify-center opacity-30 text-[9px] text-center px-1 font-bold text-white uppercase">Empty</div>
+              <div className="w-12 h-12 border border-white/10 border-dashed rounded-full flex items-center justify-center opacity-30 text-[9px] text-center px-1 font-bold text-white uppercase">Empty</div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Message Notifications - SOL ALT KÖŞE */}
       {message && (
-        <div className="fixed bottom-28 left-6 px-6 py-4 bg-white/15 backdrop-blur-3xl border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.5)] flex items-center gap-4 animate-in fade-in slide-in-from-left-8 duration-500 pointer-events-none z-[100]">
+        <div className="fixed bottom-32 left-6 px-6 py-4 bg-white/15 backdrop-blur-3xl border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.5)] flex items-center gap-4 animate-in fade-in slide-in-from-left-8 duration-500 pointer-events-none z-[100]">
           <span className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping" />
           <span className="text-white font-black uppercase tracking-[0.2em] text-[9px] sm:text-[12px] drop-shadow-md">
             {message}
@@ -124,28 +151,27 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
         </div>
       )}
 
-      {/* Quick Slots - Compact Glass Effect */}
       <div className="flex flex-col items-center w-full gap-3 pointer-events-auto mb-4" onMouseDown={e => e.stopPropagation()}>
-        <div className="flex gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/20 rounded-[2rem] sm:rounded-[3rem] shadow-2xl">
-          {[...Array(5)].map((_, i) => {
-            const item = usableItems[i];
+        <div className="flex gap-1.5 sm:gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/20 rounded-full shadow-2xl overflow-x-auto max-w-[95vw] no-scrollbar">
+          {[...Array(9)].map((_, i) => {
+            const data = usableItems[i];
+            const item = data?.item;
             const isEquipped = item && item.id === stats.equippedItemId;
             return (
               <div 
                 key={i} 
                 onClick={() => item && onAction('use', item)}
-                className={`relative w-14 h-14 sm:w-18 sm:h-18 rounded-[1.2rem] sm:rounded-[1.5rem] border-2 flex items-center justify-center transition-all cursor-pointer ${isEquipped ? 'bg-amber-500/80 border-amber-300 shadow-[0_0_30px_rgba(245,158,11,0.5)] scale-110 z-10' : 'bg-white/5 border-white/10 hover:bg-white/15 hover:border-white/20'}`}
+                className={`relative flex-shrink-0 w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${isEquipped ? 'bg-amber-500/80 border-amber-300 shadow-[0_0_30px_rgba(245,158,11,0.5)] scale-110 z-10' : 'bg-white/5 border-white/10 hover:bg-white/15 hover:border-white/20'}`}
               >
-                <span className={`absolute -top-1.5 -left-1.5 w-5 h-5 sm:w-6 sm:h-6 rounded-lg text-[9px] sm:text-[12px] flex items-center justify-center font-black shadow-lg ${isEquipped ? 'bg-white text-stone-950' : 'bg-stone-800 border border-white/10 text-white/60'}`}>
+                <span className={`absolute -top-1 -left-1 w-5 h-5 sm:w-6 sm:h-6 rounded-full text-[8px] sm:text-[10px] flex items-center justify-center font-black shadow-lg ${isEquipped ? 'bg-white text-stone-950' : 'bg-stone-800 border border-white/10 text-white/60'}`}>
                   {i + 1}
                 </span>
                 {item ? (
                   <>
-                    <span className="text-2xl sm:text-3xl drop-shadow-md">{item.icon}</span>
-                    {/* Item Count - Sağ Alt */}
-                    {item.quantity > 1 && (
-                      <span className="absolute bottom-1 right-1 bg-amber-400 text-stone-900 text-[9px] sm:text-[12px] font-black px-1.5 py-0.5 rounded-lg border border-stone-900 shadow-md">
-                        {item.quantity}
+                    <span className="text-xl sm:text-2xl drop-shadow-md">{item.icon}</span>
+                    {(data.total > 1 || data.hasOverflow) && (
+                      <span className="absolute -bottom-1 -right-1 bg-amber-400 text-stone-900 w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-[8px] sm:text-[10px] font-black rounded-full border border-stone-900 shadow-md leading-none">
+                        {formatQuantity(data.total, data.maxStack)}
                       </span>
                     )}
                     {item.durability !== undefined && (
@@ -154,7 +180,7 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
                       </div>
                     )}
                   </>
-                ) : <div className="w-1.5 h-1.5 bg-white/20 rounded-full" />}
+                ) : <div className="w-1 h-1 bg-white/20 rounded-full" />}
               </div>
             );
           })}
@@ -168,6 +194,8 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </div>
   );

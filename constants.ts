@@ -8,6 +8,7 @@ export const MAX_INVENTORY_SLOTS = 25;
 
 export const TIME_SCALE = 0.02777; 
 export const SAVE_KEY = 'embers_edge_save_v5';
+export const SETTINGS_SAVE_KEY = 'embers_edge_settings_v1';
 
 export const TRANSLATIONS: Record<Language, any> = {
   en: {
@@ -224,11 +225,11 @@ export const ITEMS: { [key: string]: Item } = {
   berry: { id: 'berry', name: 'Berries', type: 'food', icon: '🫐', description: 'Sweet snack.', stackable: true, quantity: 0, maxStack: 99, effect: { hunger: 10, thirst: 5 } },
   meat_raw: { id: 'meat_raw', name: 'Raw Meat', type: 'food', icon: '🥩', description: 'Needs cooking.', stackable: true, quantity: 0, maxStack: 50, effect: { hunger: 5, health: -5 } },
   meat_cooked: { id: 'meat_cooked', name: 'Steak', type: 'food', icon: '🍖', description: 'Hearty meal.', stackable: true, quantity: 0, maxStack: 50, effect: { hunger: 40, health: 10 } },
-  axe: { id: 'axe', name: 'Stone Axe', type: 'tool', icon: '🪓', description: 'Chops trees.', stackable: false, quantity: 1, maxStack: 1, durability: 120, maxDurability: 120 },
-  pickaxe: { id: 'pickaxe', name: 'Pickaxe', type: 'tool', icon: '⛏️', description: 'Mines rocks faster.', stackable: false, quantity: 1, maxStack: 1, durability: 120, maxDurability: 120 },
-  stone_sword: { id: 'stone_sword', name: 'Stone Sword', type: 'weapon', icon: '🗡️', description: 'Basic defense.', stackable: false, quantity: 1, maxStack: 1, durability: 400, maxDurability: 400, effect: { damage: 5 } },
-  iron_sword: { id: 'iron_sword', name: 'Iron Sword', type: 'weapon', icon: '⚔️', description: 'Strong weapon.', stackable: false, quantity: 1, maxStack: 1, durability: 1000, maxDurability: 1000, effect: { damage: 12 } },
-  bow: { id: 'bow', name: 'Bow', type: 'weapon', icon: '🏹', description: 'Ranged hunting.', stackable: false, quantity: 1, maxStack: 1, durability: 100, maxDurability: 100, effect: { damage: 8 } },
+  axe: { id: 'axe', name: 'Stone Axe', type: 'tool', icon: '🪓', description: 'Chops trees.', stackable: false, quantity: 1, maxStack: 1, durability: 1500, maxDurability: 1500 },
+  pickaxe: { id: 'pickaxe', name: 'Pickaxe', type: 'tool', icon: '⛏️', description: 'Mines rocks faster.', stackable: false, quantity: 1, maxStack: 1, durability: 1500, maxDurability: 1500 },
+  stone_sword: { id: 'stone_sword', name: 'Stone Sword', type: 'weapon', icon: '🗡️', description: 'Basic defense.', stackable: false, quantity: 1, maxStack: 1, durability: 2500, maxDurability: 2500, effect: { damage: 5 } },
+  iron_sword: { id: 'iron_sword', name: 'Iron Sword', type: 'weapon', icon: '⚔️', description: 'Strong weapon.', stackable: false, quantity: 1, maxStack: 1, durability: 6000, maxDurability: 6000, effect: { damage: 12 } },
+  bow: { id: 'bow', name: 'Bow', type: 'weapon', icon: '🏹', description: 'Ranged hunting.', stackable: false, quantity: 1, maxStack: 1, durability: 2000, maxDurability: 2000, effect: { damage: 8 } },
   arrow: { id: 'arrow', name: 'Arrows', type: 'resource', icon: '↗️', description: 'Ammunition.', stackable: true, quantity: 5, maxStack: 99 },
   campfire: { id: 'campfire', name: 'Campfire Kit', type: 'structure', icon: '🔥', description: 'Cooks raw meat.', stackable: true, quantity: 1, maxStack: 10 },
   tent: { id: 'tent', name: 'Tent Kit', type: 'structure', icon: '⛺', description: 'Sleep through night.', stackable: true, quantity: 1, maxStack: 5 },

@@ -10,7 +10,7 @@ import { DeathScreen } from './components/DeathScreen';
 import { SoundManager } from './components/SoundManager';
 import { Minimap } from './components/Minimap';
 import { PlayerStats, Item, Entity, GameState, EntityType, TileType, GameSettings, Language, Projectile, WeatherType } from './types';
-import { INITIAL_STATS, WORLD_SIZE, ITEMS, TIME_SCALE, RECIPES, TRANSLATIONS, TILE_WIDTH, TILE_HEIGHT, SAVE_KEY, MAX_INVENTORY_SLOTS } from './constants';
+import { INITIAL_STATS, WORLD_SIZE, ITEMS, TIME_SCALE, RECIPES, TRANSLATIONS, TILE_WIDTH, TILE_HEIGHT, SAVE_KEY, SETTINGS_SAVE_KEY, MAX_INVENTORY_SLOTS } from './constants';
 
 export const getTileType = (x: number, y: number, level: number = 1): TileType => {
   const dx = x - WORLD_SIZE / 2;
@@ -93,28 +93,44 @@ const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState & { 
     birds: {x: number, y: number, vx: number, vy: number, flap: number}[],
     ripples: {x: number, y: number, startTime: number}[],
-    particles: {id: string, x: number, y: number, vx: number, vy: number, life: number, color: string, size: number}[],
+    particles: {id: string, x: number, y: number, vx: number, vy: number, life: number, color: string, size: number, type?: string}[],
     shake: number,
     isRecentlyAttackedByAnimal: boolean,
     isDead: boolean
-  }>({
-    playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 },
-    playerStats: INITIAL_STATS,
-    inventory: [],
-    entities: [],
-    projectiles: [],
-    birds: [],
-    ripples: [],
-    particles: [],
-    shake: 0,
-    isRecentlyAttackedByAnimal: false,
-    isDead: false,
-    time: 600,
-    isDay: true,
-    gameStarted: false,
-    weather: { type: 'clear', intensity: 0, transition: 0 },
-    settings: { language: 'en', soundEnabled: true },
-    viewConfig: { zoom: 1.0, rotation: 0, cameraOffsetX: 0, cameraOffsetY: 0 }
+  }>(() => {
+    let initialSettings: GameSettings = { language: 'en', soundEnabled: true };
+    let initialCharacter = INITIAL_STATS.character;
+
+    const savedSettings = localStorage.getItem(SETTINGS_SAVE_KEY);
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed.settings) initialSettings = parsed.settings;
+        if (parsed.character) initialCharacter = parsed.character;
+      } catch (e) {
+        console.error("Failed to parse saved settings", e);
+      }
+    }
+
+    return {
+      playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 },
+      playerStats: { ...INITIAL_STATS, character: initialCharacter },
+      inventory: [],
+      entities: [],
+      projectiles: [],
+      birds: [],
+      ripples: [],
+      particles: [],
+      shake: 0,
+      isRecentlyAttackedByAnimal: false,
+      isDead: false,
+      time: 600,
+      isDay: true,
+      gameStarted: false,
+      weather: { type: 'clear', intensity: 0, transition: 0 },
+      settings: initialSettings,
+      viewConfig: { zoom: 1.0, rotation: 0, cameraOffsetX: 0, cameraOffsetY: 0 }
+    };
   });
 
   const [hasSave, setHasSave] = useState(false);
@@ -135,6 +151,27 @@ const App: React.FC = () => {
     }, 10000);
     return () => clearInterval(saveInterval);
   }, [gameState.gameStarted, gameState.isDead]);
+
+  useEffect(() => {
+    const settingsData = {
+      settings: gameState.settings,
+      character: gameState.playerStats.character
+    };
+    localStorage.setItem(SETTINGS_SAVE_KEY, JSON.stringify(settingsData));
+  }, [gameState.settings, gameState.playerStats.character]);
+
+  useEffect(() => {
+    const handleBlur = () => {
+      if (gameStateRef.current.gameStarted && !gameStateRef.current.isDead) {
+        const { birds, ripples, particles, shake, isRecentlyAttackedByAnimal, isDead, ...stateToSave } = gameStateRef.current;
+        localStorage.setItem(SAVE_KEY, JSON.stringify({ ...stateToSave, gameStarted: false }));
+        setHasSave(true);
+        setGameState(prev => ({ ...prev, gameStarted: false }));
+      }
+    };
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
+  }, []);
 
   const [uiState, setUiState] = useState({ inventoryOpen: false, craftingOpen: false, settingsOpen: false, message: '' });
   const [isResting, setIsResting] = useState(false);
@@ -168,9 +205,9 @@ const App: React.FC = () => {
     setGameState(prev => ({
       ...prev,
       playerPos: { x: WORLD_SIZE/2, y: WORLD_SIZE/2 + 8 },
-      playerStats: INITIAL_STATS,
+      playerStats: { ...INITIAL_STATS, character: prev.playerStats.character },
       inventory: [],
-      entities: spawnEntities(8000),
+      entities: spawnEntities(4000),
       isDead: false,
       gameStarted: true
     }));
@@ -179,11 +216,44 @@ const App: React.FC = () => {
   const canCarryItem = useCallback((itemId: string, quantity: number, currentInventory: Item[]): boolean => {
     const itemTemplate = ITEMS[itemId];
     if (!itemTemplate) return true;
+    
+    let remaining = quantity;
     if (itemTemplate.stackable) {
-      const existingStack = currentInventory.find(i => i.id === itemId && i.quantity < (i.maxStack || 99));
-      if (existingStack) return true;
+      const existingStacks = currentInventory.filter(i => i.id === itemId && i.quantity < (i.maxStack || 99));
+      existingStacks.forEach(s => {
+        remaining -= Math.min(remaining, (s.maxStack || 99) - s.quantity);
+      });
     }
-    return currentInventory.length < MAX_INVENTORY_SLOTS;
+
+    if (remaining <= 0) return true;
+    
+    const neededSlots = itemTemplate.stackable ? Math.ceil(remaining / (itemTemplate.maxStack || 99)) : remaining;
+    return (currentInventory.length + neededSlots) <= MAX_INVENTORY_SLOTS;
+  }, []);
+
+  const addItemsToInventory = useCallback((itemId: string, quantity: number, currentInventory: Item[]): Item[] => {
+    const itemTemplate = ITEMS[itemId];
+    if (!itemTemplate) return currentInventory;
+    const newInv = [...currentInventory];
+    let remaining = quantity;
+
+    if (itemTemplate.stackable) {
+      for (let i = 0; i < newInv.length && remaining > 0; i++) {
+        if (newInv[i].id === itemId && newInv[i].quantity < (newInv[i].maxStack || 99)) {
+          const add = Math.min(remaining, (newInv[i].maxStack || 99) - newInv[i].quantity);
+          newInv[i] = { ...newInv[i], quantity: newInv[i].quantity + add };
+          remaining -= add;
+        }
+      }
+    }
+
+    while (remaining > 0) {
+      const add = itemTemplate.stackable ? Math.min(remaining, (itemTemplate.maxStack || 99)) : 1;
+      newInv.push({ ...itemTemplate, quantity: add });
+      remaining -= itemTemplate.stackable ? add : 1;
+    }
+
+    return newInv;
   }, []);
 
   const triggerDrink = useCallback(() => {
@@ -232,17 +302,12 @@ const App: React.FC = () => {
     }
     else if (target.type === 'rabbit') { rewardId = 'meat_raw'; qty = 1; }
     
-    const rewardItem = { ...ITEMS[rewardId], quantity: qty };
-    const newInv = [...prev.inventory];
-    
-    if (!canCarryItem(rewardId, qty, newInv)) {
+    if (!canCarryItem(rewardId, qty, prev.inventory)) {
        showMessage('inv_full');
        return { ...prev, entities: updatedEntities };
     }
 
-    const existingIdx = newInv.findIndex(i => i.id === rewardItem.id && (i.quantity + qty <= (i.maxStack || 99)));
-    if (existingIdx > -1) newInv[existingIdx].quantity += qty;
-    else newInv.push(rewardItem);
+    const newInv = addItemsToInventory(rewardId, qty, prev.inventory);
     
     let newXp = prev.playerStats.xp + xpGain;
     let newLevel = prev.playerStats.level;
@@ -265,7 +330,7 @@ const App: React.FC = () => {
         lastInteractTime: performance.now() 
       }
     };
-  }, [showMessage, canCarryItem]);
+  }, [showMessage, canCarryItem, addItemsToInventory]);
 
   const executeInteraction = useCallback((entityId: string) => {
     if (isPaused) return;
@@ -306,10 +371,14 @@ const App: React.FC = () => {
             SoundManager.playGather('bush_berry'); showMessage('meat_cooked');
             let ni = [...prev.inventory]; ni[rawIdx].quantity -= 1;
             if (ni[rawIdx].quantity <= 0) ni.splice(rawIdx, 1);
-            const cookedIdx = ni.findIndex(i => i.id === 'meat_cooked');
-            if (cookedIdx > -1) ni[cookedIdx].quantity += 1;
-            else ni.push({ ...ITEMS.meat_cooked, quantity: 1 });
-            return { ...prev, inventory: ni };
+            
+            if (canCarryItem('meat_cooked', 1, ni)) {
+                ni = addItemsToInventory('meat_cooked', 1, ni);
+                return { ...prev, inventory: ni };
+            } else {
+                showMessage('inv_full');
+                return prev;
+            }
          } else { showMessage('Need Raw Meat!', true); return prev; }
       }
 
@@ -328,7 +397,8 @@ const App: React.FC = () => {
           vy: (Math.random() - 0.5) * 4 - 2,
           life: 0.8 + Math.random() * 0.5,
           color: particleColor,
-          size: 2 + Math.random() * 3
+          size: 2 + Math.random() * 3,
+          type: 'debris'
         });
       }
 
@@ -376,7 +446,7 @@ const App: React.FC = () => {
       if (newHealth <= 0) return handleEntityDeath(target, nextStateBase);
       return nextStateBase;
     });
-  }, [showMessage, triggerRest, handleEntityDeath, isPaused, canCarryItem]);
+  }, [showMessage, triggerRest, handleEntityDeath, isPaused, canCarryItem, addItemsToInventory]);
 
   const handleInteract = useCallback(() => {
     if (isPaused) return;
@@ -400,16 +470,24 @@ const App: React.FC = () => {
     if (action === 'use' || action === 'equip') {
        const item = data as Item;
        if (item.type === 'food') {
-          setGameState(prev => ({
-            ...prev,
-            playerStats: {
-              ...prev.playerStats,
-              hunger: Math.min(100, prev.playerStats.hunger + (item.effect?.hunger || 0)),
-              thirst: Math.min(100, prev.playerStats.thirst + (item.effect?.thirst || 0)),
-              health: Math.min(prev.playerStats.maxHealth, prev.playerStats.health + (item.effect?.health || 0))
-            },
-            inventory: prev.inventory.map(i => i.id === item.id ? { ...i, quantity: i.quantity - 1 } : i).filter(i => i.quantity > 0)
-          }));
+          setGameState(prev => {
+            const idx = prev.inventory.findIndex(i => i.id === item.id);
+            if (idx === -1) return prev;
+            const updatedInv = [...prev.inventory];
+            updatedInv[idx] = { ...updatedInv[idx], quantity: updatedInv[idx].quantity - 1 };
+            if (updatedInv[idx].quantity <= 0) updatedInv.splice(idx, 1);
+            
+            return {
+                ...prev,
+                playerStats: {
+                  ...prev.playerStats,
+                  hunger: Math.min(100, prev.playerStats.hunger + (item.effect?.hunger || 0)),
+                  thirst: Math.min(100, prev.playerStats.thirst + (item.effect?.thirst || 0)),
+                  health: Math.min(prev.playerStats.maxHealth, prev.playerStats.health + (item.effect?.health || 0))
+                },
+                inventory: updatedInv
+            };
+          });
           SoundManager.playGather('bush_berry');
        } else if (item.type === 'tool' || item.type === 'weapon') {
           SoundManager.playUI('equip');
@@ -425,21 +503,31 @@ const App: React.FC = () => {
     } else if (action === 'repair') {
       const itemToRepair = data as Item;
       setGameState(prev => {
-        const ni = [...prev.inventory];
-        const woodIdx = ni.findIndex(i => i.id === 'wood');
-        const stoneIdx = ni.findIndex(i => i.id === 'stone');
-        if (woodIdx > -1 && ni[woodIdx].quantity >= 2 && stoneIdx > -1 && ni[stoneIdx].quantity >= 2) {
+        let ni = [...prev.inventory];
+        const totalWood = ni.filter(i => i.id === 'wood').reduce((sum, i) => sum + i.quantity, 0);
+        const totalStone = ni.filter(i => i.id === 'stone').reduce((sum, i) => sum + i.quantity, 0);
+        
+        if (totalWood >= 2 && totalStone >= 2) {
           const itemIdx = ni.findIndex(i => i.id === itemToRepair.id);
           if (itemIdx > -1) {
-            const item = { ...ni[itemIdx] };
-            item.durability = item.maxDurability;
-            ni[itemIdx] = item;
-            ni[woodIdx].quantity -= 2;
-            ni[stoneIdx].quantity -= 2;
-            const filteredNi = ni.filter(i => i.quantity > 0);
+            ni[itemIdx] = { ...ni[itemIdx], durability: ni[itemIdx].maxDurability };
+            
+            let woodNeed = 2; let stoneNeed = 2;
+            ni = ni.map(item => {
+              if (item.id === 'wood' && woodNeed > 0) {
+                const sub = Math.min(item.quantity, woodNeed); woodNeed -= sub;
+                return { ...item, quantity: item.quantity - sub };
+              }
+              if (item.id === 'stone' && stoneNeed > 0) {
+                const sub = Math.min(item.quantity, stoneNeed); stoneNeed -= sub;
+                return { ...item, quantity: item.quantity - sub };
+              }
+              return item;
+            }).filter(i => i.quantity > 0);
+
             showMessage('Repaired!', true);
             SoundManager.playUI('fanfare');
-            return { ...prev, inventory: filteredNi };
+            return { ...prev, inventory: ni };
           }
         } else {
           showMessage('need_resources');
@@ -448,9 +536,10 @@ const App: React.FC = () => {
       });
     } else if (action === 'repair_all') {
       setGameState(prev => {
-        const ni = [...prev.inventory];
-        const woodIdx = ni.findIndex(i => i.id === 'wood');
-        const stoneIdx = ni.findIndex(i => i.id === 'stone');
+        let ni = [...prev.inventory];
+        const totalWood = ni.filter(i => i.id === 'wood').reduce((sum, i) => sum + i.quantity, 0);
+        const totalStone = ni.filter(i => i.id === 'stone').reduce((sum, i) => sum + i.quantity, 0);
+        
         const damagedItems = ni.filter(item => (item.type === 'tool' || item.type === 'weapon') && (item.durability || 0) < (item.maxDurability || 0));
         
         if (damagedItems.length === 0) {
@@ -458,19 +547,35 @@ const App: React.FC = () => {
           return prev;
         }
 
-        if (woodIdx > -1 && ni[woodIdx].quantity >= 5 && stoneIdx > -1 && ni[stoneIdx].quantity >= 5) {
-          const finalInv = ni.map(item => {
-            if (item.type === 'tool' || item.type === 'weapon') {
+        const cost = 5;
+        if (totalWood >= cost && totalStone >= cost) {
+          ni = ni.map(item => {
+            if ((item.type === 'tool' || item.type === 'weapon') && item.durability !== undefined) {
               return { ...item, durability: item.maxDurability };
             }
-            if (item.id === 'wood') return { ...item, quantity: item.quantity - 5 };
-            if (item.id === 'stone') return { ...item, quantity: item.quantity - 5 };
+            return item;
+          });
+
+          let woodToDeduct = cost;
+          let stoneToDeduct = cost;
+          
+          ni = ni.map(item => {
+            if (item.id === 'wood' && woodToDeduct > 0) {
+              const deduct = Math.min(item.quantity, woodToDeduct);
+              woodToDeduct -= deduct;
+              return { ...item, quantity: item.quantity - deduct };
+            }
+            if (item.id === 'stone' && stoneToDeduct > 0) {
+              const deduct = Math.min(item.quantity, stoneToDeduct);
+              stoneToDeduct -= deduct;
+              return { ...item, quantity: item.quantity - deduct };
+            }
             return item;
           }).filter(i => i.quantity > 0);
 
           showMessage('All Tools Repaired!', true);
           SoundManager.playUI('fanfare');
-          return { ...prev, inventory: finalInv };
+          return { ...prev, inventory: ni };
         } else {
           showMessage('need_resources');
           return prev;
@@ -562,13 +667,35 @@ const App: React.FC = () => {
         nextWeather.intensity = Math.min(1.0, nextWeather.intensity + dt * 0.2);
       }
 
-      const nextParticles = prev.particles.map(p => ({
-        ...p,
-        x: p.x + p.vx * dt,
-        y: p.y + p.vy * dt,
-        vy: p.vy + 9.8 * dt,
-        life: p.life - dt
-      })).filter(p => p.life > 0);
+      const nextParticles = prev.particles.map(p => {
+        const isSmoke = p.type === 'smoke';
+        return {
+          ...p,
+          x: p.x + (p.vx + (isSmoke ? Math.sin(now / 500 + (p.x * 10)) * 0.2 : 0)) * dt,
+          y: p.y + p.vy * dt,
+          vy: isSmoke ? p.vy * 0.99 : p.vy + 9.8 * dt,
+          size: isSmoke ? p.size + dt * 10 : p.size,
+          life: p.life - dt
+        };
+      }).filter(p => p.life > 0);
+
+      const campfires = prev.entities.filter(e => e.type === 'campfire');
+      const newSmoke: any[] = [];
+      if (Math.random() < dt * 8) {
+        campfires.forEach(cf => {
+          newSmoke.push({
+            id: `smoke-${cf.id}-${now}-${Math.random()}`,
+            type: 'smoke',
+            x: cf.x + (Math.random() - 0.5) * 0.2,
+            y: cf.y - 0.2,
+            vx: (Math.random() - 0.5) * 0.4,
+            vy: -1.2 - Math.random() * 0.6,
+            life: 2.0 + Math.random() * 1.5,
+            color: prev.isDay ? 'rgba(120, 120, 130, 0.4)' : 'rgba(230, 230, 240, 0.5)',
+            size: 8 + Math.random() * 6
+          });
+        });
+      }
 
       const nextProjectiles: Projectile[] = prev.projectiles.map(p => ({ ...p, x: p.x + p.vx * dt, y: p.y + p.vy * dt, life: p.life - dt, trail: [...(p.trail || []), { x: p.x, y: p.y }].slice(-15) })).filter(p => p.life > 0);
       
@@ -609,7 +736,7 @@ const App: React.FC = () => {
         return { ...ent, x: newX, y: newY, aiState: newState, targetX, targetY, attackCooldown } as Entity;
       });
 
-      let finalState = { ...prev, entities: nextEntities, projectiles: nextProjectiles, particles: nextParticles, weather: nextWeather, isRecentlyAttackedByAnimal: animalAttackTriggered };
+      let finalState = { ...prev, entities: nextEntities, projectiles: nextProjectiles, particles: [...nextParticles, ...newSmoke], weather: nextWeather, isRecentlyAttackedByAnimal: animalAttackTriggered };
       
       nextProjectiles.forEach(p => {
         const hitIdx = nextEntities.findIndex(e => !['road', 'bridge', 'campfire'].includes(e.type) && Math.sqrt((e.x - p.x)**2 + (e.y - p.y)**2) < 0.8);
@@ -653,7 +780,20 @@ const App: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase(); if (key === 'f') setUiState(prev => ({ ...prev, inventoryOpen: !prev.inventoryOpen, craftingOpen: false, settingsOpen: false })); if (key === 'c') setUiState(prev => ({ ...prev, craftingOpen: !prev.craftingOpen, inventoryOpen: false, settingsOpen: false })); if (key === 'escape') { if (uiState.craftingOpen || uiState.inventoryOpen || uiState.settingsOpen) setUiState(prev => ({ ...prev, craftingOpen: false, inventoryOpen: false, settingsOpen: false })); else setGameState(g => ({ ...g, gameStarted: false })); return; }
       if (isPaused) return;
-      activeKeys.current.add(key); const numKey = parseInt(key); if (!isNaN(numKey) && numKey >= 1 && numKey <= 5) { const usableItems = gameStateRef.current.inventory.filter((i: Item) => ['tool', 'weapon', 'food'].includes(i.type)); const item = usableItems[numKey - 1]; if (item) handleHUDAction('use', item); return; }
+      activeKeys.current.add(key); const numKey = parseInt(key); if (!isNaN(numKey) && numKey >= 1 && numKey <= 9) { 
+        const itemsToUse = gameStateRef.current.inventory.filter((i: Item) => ['tool', 'weapon', 'food'].includes(i.type));
+        const uniqueItems: Item[] = [];
+        const seenIds = new Set();
+        itemsToUse.forEach(i => {
+           if (!seenIds.has(i.id)) {
+             seenIds.add(i.id);
+             uniqueItems.push(i);
+           }
+        });
+        const item = uniqueItems[numKey - 1]; 
+        if (item) handleHUDAction('use', item); 
+        return; 
+      }
       if (key === 'e') handleInteract();
     };
     const handleKeyUp = (e: KeyboardEvent) => activeKeys.current.delete(e.key.toLowerCase());
@@ -692,7 +832,7 @@ const App: React.FC = () => {
   }, [handleInteract, uiState, handleHUDAction, isResting, screenToWorld, showMessage, executeInteraction, isPaused]);
 
   if (!gameState.gameStarted) {
-    return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(8000), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: INITIAL_STATS })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
+    return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(4000), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: { ...INITIAL_STATS, character: prev.playerStats.character } })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
   }
 
   const isNearWorkbench = !!gameState.entities.find(e => e.type === 'workbench' && Math.sqrt((e.x - gameState.playerPos.x)**2 + (e.y - gameState.playerPos.y)**2) < 2.5);
@@ -729,18 +869,56 @@ const App: React.FC = () => {
       {uiState.craftingOpen && <Crafting inventory={gameState.inventory} playerLevel={gameState.playerStats.level} isNearWorkbench={isNearWorkbench} onCraft={(recipeId) => {
           const recipe = RECIPES.find(r => r.id === recipeId); if (!recipe) return;
           setGameState((prev: any) => {
-             const canCraft = Object.entries(recipe.ingredients).every(([id, qty]) => { const item = prev.inventory.find((i: Item) => i.id === id); return item && item.quantity >= (qty as number); });
+             const canCraft = Object.entries(recipe.ingredients).every(([id, qty]) => {
+                const total = prev.inventory.filter((i: Item) => i.id === id).reduce((acc: number, curr: Item) => acc + curr.quantity, 0);
+                return total >= (qty as number);
+             });
              if (!canCraft) return prev;
              const outputId = recipe.output.id;
              if (!canCarryItem(outputId, recipe.output.quantity, prev.inventory)) {
                  showMessage('inv_full');
                  return prev;
              }
-             let ni = [...prev.inventory]; Object.entries(recipe.ingredients).forEach(([id, qty]) => { const idx = ni.findIndex(i => i.id === id); if (idx > -1) { ni[idx].quantity -= (qty as number); if (ni[idx].quantity <= 0) ni.splice(idx, 1); } });
-             const newItem = { ...recipe.output }; let updatedEntities = [...prev.entities]; let placedDirectly = false;
-             if (newItem.type === 'structure') { const spot = findPlacementSpot(prev.playerPos.x, prev.playerPos.y, updatedEntities); if (spot) { updatedEntities.push({ id: `struct-${Date.now()}`, x: spot.x, y: spot.y, type: newItem.id as EntityType, health: 10, maxHealth: 10, spawnTime: Date.now() }); placedDirectly = true; showMessage(t('placed') + ': ' + recipe.name, true); SoundManager.playUI('fanfare'); } }
-             if (!placedDirectly) { const existingIdx = ni.findIndex(i => i.id === newItem.id && (i.quantity + newItem.quantity <= (i.maxStack || 99))); if (existingIdx > -1) ni[existingIdx].quantity += newItem.quantity; else ni.push(newItem); SoundManager.playUI('fanfare'); showMessage(t('crafted') + ': ' + recipe.name, true); }
-             let newEquippedId = prev.playerStats.equippedItemId; if (!placedDirectly && (newItem.type === 'tool' || newItem.type === 'weapon')) newEquippedId = newItem.id;
+             
+             let ni = [...prev.inventory];
+             Object.entries(recipe.ingredients).forEach(([id, qty]) => {
+               let remainingToRemove = qty as number;
+               while (remainingToRemove > 0) {
+                 const idx = ni.findIndex(i => i.id === id);
+                 if (idx > -1) {
+                   const remove = Math.min(remainingToRemove, ni[idx].quantity);
+                   ni[idx] = { ...ni[idx], quantity: ni[idx].quantity - remove };
+                   remainingToRemove -= remove;
+                   if (ni[idx].quantity <= 0) ni.splice(idx, 1);
+                 } else break;
+               }
+             });
+
+             const newItemTemplate = { ...recipe.output };
+             let updatedEntities = [...prev.entities];
+             let placedDirectly = false;
+             
+             if (newItemTemplate.type === 'structure') {
+               const spot = findPlacementSpot(prev.playerPos.x, prev.playerPos.y, updatedEntities);
+               if (spot) {
+                 updatedEntities.push({ id: `struct-${Date.now()}`, x: spot.x, y: spot.y, type: newItemTemplate.id as EntityType, health: 10, maxHealth: 10, spawnTime: Date.now() });
+                 placedDirectly = true;
+                 showMessage(t('placed') + ': ' + recipe.name, true);
+                 SoundManager.playUI('fanfare');
+               }
+             }
+             
+             if (!placedDirectly) {
+               ni = addItemsToInventory(newItemTemplate.id, newItemTemplate.quantity, ni);
+               SoundManager.playUI('fanfare');
+               showMessage(t('crafted') + ': ' + recipe.name, true);
+             }
+             
+             let newEquippedId = prev.playerStats.equippedItemId;
+             if (!placedDirectly && (newItemTemplate.type === 'tool' || newItemTemplate.type === 'weapon')) {
+                const justAdded = ni.find(i => i.id === newItemTemplate.id);
+                if (justAdded) newEquippedId = justAdded.id;
+             }
              return { ...prev, inventory: ni, entities: updatedEntities, playerStats: { ...prev.playerStats, equippedItemId: newEquippedId } };
           });
       }} onClose={() => setUiState(s => ({...s, craftingOpen: false}))} onSwitchToInventory={() => setUiState(s => ({...s, inventoryOpen: true, craftingOpen: false}))} language={gameState.settings.language} />}
@@ -753,7 +931,7 @@ const App: React.FC = () => {
               <button onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, soundEnabled: !prev.settings.soundEnabled}}))} className={`py-3.5 rounded-xl font-black text-[12px] border ${gameState.settings.soundEnabled ? 'bg-amber-500 text-stone-900 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{t('sound')}: {gameState.settings.soundEnabled ? 'ON' : 'OFF'}</button>
               <div className="flex flex-col gap-3 mt-4">
                 <span className="text-[12px] font-black tracking-widest text-white/40 uppercase">{t('language')}</span>
-                <div className="grid grid-cols-2 gap-3">{(['en', 'tr'] as Language[]).map(l => (<button key={l} onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, language: l}}))} className={`py-3.5 rounded-xl font-black text-[12px] uppercase border transition-all ${gameState.settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{l === 'en' ? 'English' : 'Türkçe'}</button>))}</div>
+                <div className="grid grid-cols-2 gap-3">{(['en', 'tr'] as Language[]).map(l => ( <button key={l} onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, language: l}}))} className={`py-3.5 rounded-xl font-black text-[12px] uppercase border transition-all ${gameState.settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{l === 'en' ? 'English' : 'Türkçe'}</button>)) }</div>
               </div>
             </div>
             <button onClick={() => setUiState(s => ({...s, settingsOpen: false}))} className="w-full py-4 mt-10 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-[12px] hover:bg-amber-500 transition-colors shadow-lg active:scale-95">{t('back')}</button>

@@ -12,8 +12,8 @@ interface Props {
 
 export const Minimap: React.FC<Props> = ({ playerPos, entities, playerStats }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mapSize = 140; // Mobilde daha kompakt olması için biraz küçültüldü
-  const viewRadius = 25;
+  const mapSize = 140; 
+  const viewRadius = 35; // Görüş çapı büyütüldü
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -31,7 +31,7 @@ export const Minimap: React.FC<Props> = ({ playerPos, entities, playerStats }) =
     const startY = Math.floor(playerPos.y - viewRadius);
     const endY = Math.ceil(playerPos.y + viewRadius);
 
-    // Dairesel maskeleme (Canvas seviyesinde)
+    // Dairesel maskeleme
     ctx.save();
     ctx.beginPath();
     ctx.arc(mapSize / 2, mapSize / 2, mapSize / 2, 0, Math.PI * 2);
@@ -105,9 +105,9 @@ export const Minimap: React.FC<Props> = ({ playerPos, entities, playerStats }) =
     ctx.fill();
     ctx.restore();
 
-    ctx.restore(); // Maskeyi bitir
+    ctx.restore(); 
 
-    // 4. Border Overlay (Glass)
+    // 4. Border Overlay
     ctx.strokeStyle = 'rgba(255,255,255,0.2)';
     ctx.lineWidth = 4;
     ctx.beginPath();

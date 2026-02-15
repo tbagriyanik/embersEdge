@@ -8,7 +8,7 @@ interface Props {
   gameState: GameState & { 
     birds: {x: number, y: number, vx: number, vy: number, flap: number}[],
     ripples: {x: number, y: number, startTime: number}[],
-    particles: {id: string, x: number, y: number, vx: number, vy: number, life: number, color: string, size: number}[],
+    particles: {id: string, x: number, y: number, vx: number, vy: number, life: number, color: string, size: number, type?: string}[],
     shake: number,
     isRecentlyAttackedByAnimal: boolean
   };
@@ -85,17 +85,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
       fogGrad.addColorStop(1, `rgba(200, 200, 210, ${0.4 * intensity})`);
       ctx.fillStyle = fogGrad;
       ctx.fillRect(0, 0, width, height);
-      
-      // Moving fog patches
-      for (let i = 0; i < 5; i++) {
-        const fx = ((i * 0.2 + now / 10000) % 1) * width;
-        const fy = Math.sin(now / 2000 + i) * 50 + height / 2;
-        const grad = ctx.createRadialGradient(fx, fy, 0, fx, fy, 300);
-        grad.addColorStop(0, `rgba(255, 255, 255, ${0.1 * intensity})`);
-        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, width, height);
-      }
     }
     ctx.restore();
   };
@@ -112,7 +101,7 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     const isInteracting = (now - lastInteract) < 400;
 
     const timeSinceCombatHit = now - (stats.lastCombatDamageTime || 0);
-    const isRecentlyCombatHit = timeSinceCombatHit < 800; // Physical combat flash only
+    const isRecentlyCombatHit = timeSinceCombatHit < 800;
     
     const swing = isWalking ? Math.sin(now / 100) * 0.4 : 0;
     const bob = isWalking ? Math.abs(Math.sin(now / 100)) * 2 * zoom : 0;
@@ -121,7 +110,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     ctx.translate(x, y - bob);
     ctx.globalAlpha = 1.0; 
 
-    // ONLY flash red if attacked by a combat entity
     const currentBodyColor = isRecentlyCombatHit && Math.sin(now / 50) > 0 ? '#b91c1c' : outfitColor;
     
     ctx.fillStyle = currentBodyColor;
@@ -222,7 +210,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
       else if (cycle >= 0.35 && cycle < 0.7) { bgColor = '#166534'; overlayAlpha = 0; }
       else if (cycle >= 0.7 && cycle < 0.85) { const p = (cycle - 0.7) / 0.15; bgColor = '#1e1b4b'; overlayAlpha = 0.65 * p; overlayColor = '107, 33, 168'; }
 
-      // Adjust for weather
       if (weather.type === 'rain') { overlayAlpha = Math.max(overlayAlpha, 0.3 * weather.intensity); overlayColor = '30, 40, 60'; }
       if (weather.type === 'fog') { overlayAlpha = Math.max(overlayAlpha, 0.5 * weather.intensity); overlayColor = '150, 150, 160'; }
       if (weather.type === 'snow') { overlayAlpha = Math.max(overlayAlpha, 0.2 * weather.intensity); overlayColor = '200, 220, 255'; }
@@ -266,18 +253,28 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         const s = toScreen(p.x, p.y, zoom, rotation);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
+        const isSmoke = p.type === 'smoke';
+        
+        ctx.save();
         ctx.fillStyle = p.color;
-        ctx.globalAlpha = Math.min(1, p.life * 1.5);
+        ctx.globalAlpha = isSmoke ? Math.min(0.5, p.life * 0.4) : Math.min(1, p.life * 1.5);
+        
+        if (isSmoke) {
+          ctx.shadowBlur = 10 * zoom;
+          ctx.shadowColor = p.color;
+        }
+
         ctx.beginPath();
         ctx.arc(centerX, centerY, p.size * zoom, 0, Math.PI * 2);
         ctx.fill();
-        ctx.globalAlpha = 1.0;
+        ctx.restore();
       });
 
       state.projectiles.forEach((proj: any) => {
         const s = toScreen(proj.x, proj.y, zoom, rotation);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
+        
         if (proj.trail && proj.trail.length > 1) {
           ctx.save();
           const trailPoints = proj.trail.map((pt: any) => {
@@ -288,19 +285,42 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
           ctx.moveTo(trailPoints[0].x, trailPoints[0].y);
           for (let i = 1; i < trailPoints.length; i++) ctx.lineTo(trailPoints[i].x, trailPoints[i].y);
           ctx.lineTo(centerX, centerY);
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-          ctx.lineWidth = 1.2 * zoom;
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+          ctx.lineWidth = 1 * zoom;
           ctx.stroke();
           ctx.restore();
         }
+
         const angle = Math.atan2(proj.vy, proj.vx);
         ctx.save();
         ctx.translate(centerX, centerY);
         ctx.rotate(angle);
-        ctx.font = `${24 * zoom}px serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('↗️', 0, 0);
+        
+        ctx.beginPath();
+        ctx.moveTo(-15 * zoom, 0);
+        ctx.lineTo(15 * zoom, 0);
+        ctx.strokeStyle = '#5d4037'; 
+        ctx.lineWidth = 2.5 * zoom;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(15 * zoom, 0);
+        ctx.lineTo(10 * zoom, -4 * zoom);
+        ctx.lineTo(10 * zoom, 4 * zoom);
+        ctx.closePath();
+        ctx.fillStyle = '#b0bec5'; 
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.moveTo(-15 * zoom, 0);
+        ctx.lineTo(-20 * zoom, -5 * zoom);
+        ctx.lineTo(-12 * zoom, 0);
+        ctx.lineTo(-20 * zoom, 5 * zoom);
+        ctx.closePath();
+        ctx.fillStyle = '#cfd8dc';
+        ctx.fill();
+        
         ctx.restore();
       });
 
@@ -309,16 +329,23 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         .sort((a,b) => a.y - b.y);
 
       entitiesToDraw.forEach(ent => {
+        const distToPlayer = Math.sqrt((ent.x - state.playerPos.x)**2 + (ent.y - state.playerPos.y)**2);
+        const isSolidFocus = distToPlayer < 6; // Odak yarıçapı
+        
         const s = toScreen(ent.x, ent.y, zoom, rotation);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
         ctx.save();
+        
         const isBuilding = ['tent', 'hut', 'workbench', 'watchtower', 'castle_gate'].includes(ent.type);
         const isStatic = isBuilding || ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'road', 'bridge', 'stone_wall'].includes(ent.type);
+        
+        // Shadow Focus
+        let shadowAlpha = isSolidFocus ? 0.25 : 0.15;
         let shadowW = isStatic ? 8 * zoom : 14 * zoom;
         let shadowH = isStatic ? 4 * zoom : 7 * zoom;
         if (isBuilding) { shadowW *= 1.8; shadowH *= 1.8; }
-        ctx.fillStyle = 'rgba(0,0,0,0.15)'; 
+        ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`; 
         ctx.beginPath(); ctx.ellipse(centerX, centerY + 18 * zoom, shadowW, shadowH, 0, 0, Math.PI * 2); ctx.fill();
         
         if (ent.type === 'player') {
@@ -331,16 +358,26 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
           if (ent.type === 'hut') entityFontSize = 80;
           if (ent.type === 'watchtower') entityFontSize = 90;
           if (ent.type === 'workbench') entityFontSize = 54;
+          
           ctx.save();
           ctx.translate(centerX, centerY + 10 * zoom - bounce);
           
+          // Solid Focus Effect (Renk canlılığı ve netlik)
+          if (!isSolidFocus) {
+            ctx.filter = 'grayscale(30%) opacity(80%)';
+          } else {
+            ctx.shadowBlur = 5 * zoom;
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+          }
+
           if (weather.type === 'snow' && !isBuilding && ent.type !== 'campfire') {
-            ctx.shadowBlur = 10;
+            ctx.shadowBlur = isSolidFocus ? 12 : 8;
             ctx.shadowColor = 'white';
           }
           
           ctx.font = `${entityFontSize * zoom}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
           ctx.fillText(icons[ent.type] || '❓', 0, 0);
+          
           if (ent.health < ent.maxHealth) {
              const barW = 32 * zoom; const barH = 5 * zoom;
              ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(-barW/2, 6*zoom, barW, barH);
@@ -356,7 +393,8 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         ctx.save();
         const screenCenterX = canvas.width / 2 + cameraOffsetX;
         const screenCenterY = canvas.height / 2 + cameraOffsetY;
-        const nightGrad = ctx.createRadialGradient(screenCenterX, screenCenterY, 60 * zoom, screenCenterX, screenCenterY, 300 * zoom);
+        // Görüş çapı büyütüldü (60 -> 100, 300 -> 450)
+        const nightGrad = ctx.createRadialGradient(screenCenterX, screenCenterY, 100 * zoom, screenCenterX, screenCenterY, 450 * zoom);
         nightGrad.addColorStop(0, `rgba(${overlayColor}, 0)`); nightGrad.addColorStop(1, `rgba(${overlayColor}, ${overlayAlpha})`);
         ctx.fillStyle = nightGrad; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();

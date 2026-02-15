@@ -60,23 +60,23 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
                 onPointerEnter={() => !draggedIndex && setHoveredItem(item)}
                 onPointerLeave={() => setHoveredItem(null)}
                 onClick={() => onAction('use', item)}
-                className={`relative aspect-square rounded-xl border-2 flex items-center justify-center text-3xl sm:text-4xl transition-all cursor-pointer ${equippedItemId === item.id ? 'border-amber-400 bg-amber-500/40' : 'border-white/10 bg-white/5 hover:bg-white/15'}`}
+                className={`relative aspect-square rounded-full border-2 flex items-center justify-center text-3xl sm:text-4xl transition-all cursor-pointer shadow-lg ${equippedItemId === item.id ? 'border-amber-400 bg-amber-500/40 scale-105' : 'border-white/10 bg-white/5 hover:bg-white/15'}`}
               >
                 {item.icon}
                 {item.quantity > 1 && (
-                  <span className="absolute bottom-1 right-1 text-[9px] sm:text-[12px] font-black text-white bg-black/50 px-1 rounded shadow-sm">
+                  <span className="absolute bottom-0 right-0 text-[9px] sm:text-[11px] font-black text-white bg-amber-600 w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center border border-stone-900 shadow-sm">
                     {item.quantity}
                   </span>
                 )}
                 {item.durability !== undefined && (
-                  <div className="absolute bottom-1.5 left-2 right-2 h-1 bg-black/40 rounded-full overflow-hidden border border-white/5">
+                  <div className="absolute bottom-1.5 left-3 right-3 h-1 bg-black/40 rounded-full overflow-hidden border border-white/5">
                     <div className="h-full bg-emerald-400" style={{ width: `${(item.durability / (item.maxDurability || 1)) * 100}%` }} />
                   </div>
                 )}
               </div>
            );
         })}
-        {itemsToDraw.length === 0 && <div className="aspect-square rounded-xl border-2 border-dashed border-white/5 flex items-center justify-center opacity-10 text-2xl">🕳️</div>}
+        {itemsToDraw.length === 0 && <div className="aspect-square rounded-full border-2 border-dashed border-white/5 flex items-center justify-center opacity-10 text-2xl">🕳️</div>}
       </div>
     </div>
   );
@@ -109,7 +109,7 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <button onClick={onSwitchToCrafting} className="px-6 py-3 rounded-2xl bg-amber-500 text-stone-950 font-black text-[10px] sm:text-[12px] uppercase tracking-widest hover:scale-105 transition-all shadow-lg active:scale-95">⚒️ {t('crafting')}</button>
+            <button onClick={onSwitchToCrafting} className="px-6 py-3 rounded-full bg-amber-500 text-stone-950 font-black text-[10px] sm:text-[12px] uppercase tracking-widest hover:scale-105 transition-all shadow-lg active:scale-95">⚒️ {t('crafting')}</button>
             <button onClick={onClose} className="w-12 h-12 rounded-full hover:bg-white/10 flex items-center justify-center text-white/40 text-2xl transition-colors">✕</button>
           </div>
         </div>
@@ -119,18 +119,18 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
           <div className="md:w-1/3 flex flex-row md:flex-col gap-6 items-center md:items-stretch">
             <div 
               ref={equipRef} 
-              className={`w-32 h-32 md:w-full md:aspect-square relative rounded-3xl border-4 flex items-center justify-center text-6xl md:text-8xl transition-all shadow-inner ${isOverEquip ? 'bg-amber-400/20 border-amber-400' : 'bg-black/30 border-white/10'}`}
+              className={`w-32 h-32 md:w-full md:aspect-square relative rounded-full border-4 flex items-center justify-center text-6xl md:text-8xl transition-all shadow-2xl ${isOverEquip ? 'bg-amber-400/20 border-amber-400' : 'bg-black/30 border-white/10'}`}
             >
                {items.find(i => i.id === equippedItemId)?.icon || <span className="opacity-10">⚔️</span>}
-               <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
+               <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none rounded-full" />
             </div>
             
             <div className="flex-1 flex flex-col gap-4">
               <span className="text-[10px] sm:text-[12px] font-black uppercase tracking-widest text-white/30 md:text-center">Active Gear</span>
               {isNearWorkbench ? (
-                <button onClick={() => onAction('repair_all', null)} className="w-full py-4 rounded-2xl font-black text-[10px] sm:text-[12px] uppercase bg-emerald-500 text-white shadow-xl hover:bg-emerald-400 transition-all active:scale-95">🛠️ Repair All</button>
+                <button onClick={() => onAction('repair_all', null)} className="w-full py-4 rounded-full font-black text-[10px] sm:text-[12px] uppercase bg-emerald-500 text-white shadow-xl hover:bg-emerald-400 transition-all active:scale-95">🛠️ Repair All</button>
               ) : (
-                <div className="p-4 bg-black/20 rounded-2xl border border-white/5 hidden md:block">
+                <div className="p-4 bg-black/20 rounded-3xl border border-white/5 hidden md:block">
                   <p className="text-[10px] sm:text-[12px] text-white/20 text-center uppercase font-black tracking-widest leading-relaxed">Equip tools and weapons by dragging them here.</p>
                 </div>
               )}
