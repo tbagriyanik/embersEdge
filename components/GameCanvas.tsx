@@ -30,7 +30,7 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
   }, []);
 
   const weatherParticles = useMemo(() => {
-    return [...Array(100)].map(() => ({
+    return [...Array(60)].map(() => ({ 
       x: Math.random(),
       y: Math.random(),
       v: 1 + Math.random() * 2,
@@ -108,7 +108,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
 
     ctx.save();
     ctx.translate(x, y - bob);
-    ctx.globalAlpha = 1.0; 
 
     const currentBodyColor = isRecentlyCombatHit && Math.sin(now / 50) > 0 ? '#b91c1c' : outfitColor;
     
@@ -226,7 +225,7 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         canvas.height / 2 - (pS.y + (TILE_HEIGHT * zoom) / 2) + cameraOffsetY
       );
 
-      const renderRange = 25 / zoom;
+      const renderRange = 16 / zoom; 
       const startX = Math.max(0, Math.floor(state.playerPos.x - renderRange));
       const endX = Math.min(WORLD_SIZE, Math.ceil(state.playerPos.x + renderRange));
       const startY = Math.max(0, Math.floor(state.playerPos.y - renderRange));
@@ -258,12 +257,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         ctx.save();
         ctx.fillStyle = p.color;
         ctx.globalAlpha = isSmoke ? Math.min(0.5, p.life * 0.4) : Math.min(1, p.life * 1.5);
-        
-        if (isSmoke) {
-          ctx.shadowBlur = 10 * zoom;
-          ctx.shadowColor = p.color;
-        }
-
         ctx.beginPath();
         ctx.arc(centerX, centerY, p.size * zoom, 0, Math.PI * 2);
         ctx.fill();
@@ -275,22 +268,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
         
-        if (proj.trail && proj.trail.length > 1) {
-          ctx.save();
-          const trailPoints = proj.trail.map((pt: any) => {
-            const sc = toScreen(pt.x, pt.y, zoom, rotation);
-            return { x: sc.x + (TILE_WIDTH * zoom) / 2, y: sc.y + (TILE_HEIGHT * zoom) / 2 };
-          });
-          ctx.beginPath();
-          ctx.moveTo(trailPoints[0].x, trailPoints[0].y);
-          for (let i = 1; i < trailPoints.length; i++) ctx.lineTo(trailPoints[i].x, trailPoints[i].y);
-          ctx.lineTo(centerX, centerY);
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-          ctx.lineWidth = 1 * zoom;
-          ctx.stroke();
-          ctx.restore();
-        }
-
         const angle = Math.atan2(proj.vy, proj.vx);
         ctx.save();
         ctx.translate(centerX, centerY);
@@ -312,15 +289,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         ctx.fillStyle = '#b0bec5'; 
         ctx.fill();
         
-        ctx.beginPath();
-        ctx.moveTo(-15 * zoom, 0);
-        ctx.lineTo(-20 * zoom, -5 * zoom);
-        ctx.lineTo(-12 * zoom, 0);
-        ctx.lineTo(-20 * zoom, 5 * zoom);
-        ctx.closePath();
-        ctx.fillStyle = '#cfd8dc';
-        ctx.fill();
-        
         ctx.restore();
       });
 
@@ -329,9 +297,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         .sort((a,b) => a.y - b.y);
 
       entitiesToDraw.forEach(ent => {
-        const distToPlayer = Math.sqrt((ent.x - state.playerPos.x)**2 + (ent.y - state.playerPos.y)**2);
-        const isSolidFocus = distToPlayer < 6; // Odak yarıçapı
-        
         const s = toScreen(ent.x, ent.y, zoom, rotation);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
@@ -340,12 +305,10 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         const isBuilding = ['tent', 'hut', 'workbench', 'watchtower', 'castle_gate'].includes(ent.type);
         const isStatic = isBuilding || ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'road', 'bridge', 'stone_wall'].includes(ent.type);
         
-        // Shadow Focus
-        let shadowAlpha = isSolidFocus ? 0.25 : 0.15;
+        ctx.fillStyle = 'rgba(0,0,0,0.2)'; 
         let shadowW = isStatic ? 8 * zoom : 14 * zoom;
         let shadowH = isStatic ? 4 * zoom : 7 * zoom;
         if (isBuilding) { shadowW *= 1.8; shadowH *= 1.8; }
-        ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`; 
         ctx.beginPath(); ctx.ellipse(centerX, centerY + 18 * zoom, shadowW, shadowH, 0, 0, Math.PI * 2); ctx.fill();
         
         if (ent.type === 'player') {
@@ -362,18 +325,8 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
           ctx.save();
           ctx.translate(centerX, centerY + 10 * zoom - bounce);
           
-          // Solid Focus Effect (Renk canlılığı ve netlik)
-          if (!isSolidFocus) {
-            ctx.filter = 'grayscale(30%) opacity(80%)';
-          } else {
-            ctx.shadowBlur = 5 * zoom;
-            ctx.shadowColor = 'rgba(0,0,0,0.3)';
-          }
-
-          if (weather.type === 'snow' && !isBuilding && ent.type !== 'campfire') {
-            ctx.shadowBlur = isSolidFocus ? 12 : 8;
-            ctx.shadowColor = 'white';
-          }
+          // Katı (Solid) Görünüm - Tüm objeler her zaman tam opak
+          ctx.globalAlpha = 1.0; 
           
           ctx.font = `${entityFontSize * zoom}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
           ctx.fillText(icons[ent.type] || '❓', 0, 0);
@@ -393,8 +346,7 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         ctx.save();
         const screenCenterX = canvas.width / 2 + cameraOffsetX;
         const screenCenterY = canvas.height / 2 + cameraOffsetY;
-        // Görüş çapı büyütüldü (60 -> 100, 300 -> 450)
-        const nightGrad = ctx.createRadialGradient(screenCenterX, screenCenterY, 100 * zoom, screenCenterX, screenCenterY, 450 * zoom);
+        const nightGrad = ctx.createRadialGradient(screenCenterX, screenCenterY, 120 * zoom, screenCenterX, screenCenterY, 450 * zoom);
         nightGrad.addColorStop(0, `rgba(${overlayColor}, 0)`); nightGrad.addColorStop(1, `rgba(${overlayColor}, ${overlayAlpha})`);
         ctx.fillStyle = nightGrad; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();

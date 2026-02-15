@@ -76,7 +76,7 @@ export const findPlacementSpot = (x: number, y: number, entities: Entity[]): { x
     if (targetX < 2 || targetX >= WORLD_SIZE - 2 || targetY < 2 || targetY >= WORLD_SIZE - 2) continue;
     if (getTileType(targetX, targetY) === 'water') continue;
     
-    const collides = entities.some(e => 
+    const collides = entities.some((e: Entity) => 
       !['road', 'bridge', 'rabbit', 'scorpion', 'deer'].includes(e.type) && 
       Math.sqrt((e.x - targetX) ** 2 + (e.y - targetY) ** 2) < 0.8
     );
@@ -207,7 +207,7 @@ const App: React.FC = () => {
       playerPos: { x: WORLD_SIZE/2, y: WORLD_SIZE/2 + 8 },
       playerStats: { ...INITIAL_STATS, character: prev.playerStats.character },
       inventory: [],
-      entities: spawnEntities(4000),
+      entities: spawnEntities(1500),
       isDead: false,
       gameStarted: true
     }));
@@ -219,8 +219,8 @@ const App: React.FC = () => {
     
     let remaining = quantity;
     if (itemTemplate.stackable) {
-      const existingStacks = currentInventory.filter(i => i.id === itemId && i.quantity < (i.maxStack || 99));
-      existingStacks.forEach(s => {
+      const existingStacks = currentInventory.filter((i: Item) => i.id === itemId && i.quantity < (i.maxStack || 99));
+      existingStacks.forEach((s: Item) => {
         remaining -= Math.min(remaining, (s.maxStack || 99) - s.quantity);
       });
     }
@@ -336,7 +336,7 @@ const App: React.FC = () => {
     if (isPaused) return;
 
     setGameState(prev => {
-      const target = prev.entities.find(e => e.id === entityId);
+      const target = prev.entities.find((e: Entity) => e.id === entityId);
       if (!target) return prev;
       
       const isTool = prev.playerStats.equippedItemId !== null;
@@ -366,7 +366,7 @@ const App: React.FC = () => {
       }
 
       if (target.type === 'campfire') {
-         const rawIdx = prev.inventory.findIndex(i => i.id === 'meat_raw');
+         const rawIdx = prev.inventory.findIndex((i: Item) => i.id === 'meat_raw');
          if (rawIdx > -1) {
             SoundManager.playGather('bush_berry'); showMessage('meat_cooked');
             let ni = [...prev.inventory]; ni[rawIdx].quantity -= 1;
@@ -408,7 +408,7 @@ const App: React.FC = () => {
       let newInventory = [...prev.inventory];
       let newEquippedId = prev.playerStats.equippedItemId;
       if (newEquippedId) {
-        const itemIdx = newInventory.findIndex(i => i.id === newEquippedId);
+        const itemIdx = newInventory.findIndex((i: Item) => i.id === newEquippedId);
         if (itemIdx > -1) {
           const item = { ...newInventory[itemIdx] };
           if (item.durability !== undefined) {
@@ -426,7 +426,7 @@ const App: React.FC = () => {
         }
       }
 
-      const updatedEntities = prev.entities.map(e => {
+      const updatedEntities = prev.entities.map((e: Entity) => {
         if (e.id === target.id) {
           const isHostile = ['bear', 'scorpion', 'crab'].includes(e.type);
           return { ...e, health: newHealth, aiState: isHostile ? 'hunting' : 'fleeing', isFleeing: !isHostile } as Entity;
@@ -471,7 +471,7 @@ const App: React.FC = () => {
        const item = data as Item;
        if (item.type === 'food') {
           setGameState(prev => {
-            const idx = prev.inventory.findIndex(i => i.id === item.id);
+            const idx = prev.inventory.findIndex((i: Item) => i.id === item.id);
             if (idx === -1) return prev;
             const updatedInv = [...prev.inventory];
             updatedInv[idx] = { ...updatedInv[idx], quantity: updatedInv[idx].quantity - 1 };
@@ -504,16 +504,16 @@ const App: React.FC = () => {
       const itemToRepair = data as Item;
       setGameState(prev => {
         let ni = [...prev.inventory];
-        const totalWood = ni.filter(i => i.id === 'wood').reduce((sum, i) => sum + i.quantity, 0);
-        const totalStone = ni.filter(i => i.id === 'stone').reduce((sum, i) => sum + i.quantity, 0);
+        const totalWood = ni.filter((i: Item) => i.id === 'wood').reduce((sum: number, i: Item) => sum + i.quantity, 0);
+        const totalStone = ni.filter((i: Item) => i.id === 'stone').reduce((sum: number, i: Item) => sum + i.quantity, 0);
         
         if (totalWood >= 2 && totalStone >= 2) {
-          const itemIdx = ni.findIndex(i => i.id === itemToRepair.id);
+          const itemIdx = ni.findIndex((i: Item) => i.id === itemToRepair.id);
           if (itemIdx > -1) {
             ni[itemIdx] = { ...ni[itemIdx], durability: ni[itemIdx].maxDurability };
             
             let woodNeed = 2; let stoneNeed = 2;
-            ni = ni.map(item => {
+            ni = ni.map((item: Item) => {
               if (item.id === 'wood' && woodNeed > 0) {
                 const sub = Math.min(item.quantity, woodNeed); woodNeed -= sub;
                 return { ...item, quantity: item.quantity - sub };
@@ -523,7 +523,7 @@ const App: React.FC = () => {
                 return { ...item, quantity: item.quantity - sub };
               }
               return item;
-            }).filter(i => i.quantity > 0);
+            }).filter((i: Item) => i.quantity > 0);
 
             showMessage('Repaired!', true);
             SoundManager.playUI('fanfare');
@@ -537,10 +537,10 @@ const App: React.FC = () => {
     } else if (action === 'repair_all') {
       setGameState(prev => {
         let ni = [...prev.inventory];
-        const totalWood = ni.filter(i => i.id === 'wood').reduce((sum, i) => sum + i.quantity, 0);
-        const totalStone = ni.filter(i => i.id === 'stone').reduce((sum, i) => sum + i.quantity, 0);
+        const totalWood = ni.filter((i: Item) => i.id === 'wood').reduce((sum: number, i: Item) => sum + i.quantity, 0);
+        const totalStone = ni.filter((i: Item) => i.id === 'stone').reduce((sum: number, i: Item) => sum + i.quantity, 0);
         
-        const damagedItems = ni.filter(item => (item.type === 'tool' || item.type === 'weapon') && (item.durability || 0) < (item.maxDurability || 0));
+        const damagedItems = ni.filter((item: Item) => (item.type === 'tool' || item.type === 'weapon') && (item.durability || 0) < (item.maxDurability || 0));
         
         if (damagedItems.length === 0) {
           showMessage('Nothing to repair.', true);
@@ -549,7 +549,7 @@ const App: React.FC = () => {
 
         const cost = 5;
         if (totalWood >= cost && totalStone >= cost) {
-          ni = ni.map(item => {
+          ni = ni.map((item: Item) => {
             if ((item.type === 'tool' || item.type === 'weapon') && item.durability !== undefined) {
               return { ...item, durability: item.maxDurability };
             }
@@ -559,7 +559,7 @@ const App: React.FC = () => {
           let woodToDeduct = cost;
           let stoneToDeduct = cost;
           
-          ni = ni.map(item => {
+          ni = ni.map((item: Item) => {
             if (item.id === 'wood' && woodToDeduct > 0) {
               const deduct = Math.min(item.quantity, woodToDeduct);
               woodToDeduct -= deduct;
@@ -571,7 +571,7 @@ const App: React.FC = () => {
               return { ...item, quantity: item.quantity - deduct };
             }
             return item;
-          }).filter(i => i.quantity > 0);
+          }).filter((i: Item) => i.quantity > 0);
 
           showMessage('All Tools Repaired!', true);
           SoundManager.playUI('fanfare');
@@ -617,25 +617,31 @@ const App: React.FC = () => {
       if (activeKeys.current.has('s')) dy += 1;
       if (activeKeys.current.has('a')) dx -= 1;
       if (activeKeys.current.has('d')) dx += 1;
-      if (dx !== 0 || dy !== 0) { mouseTargetPos.current = null; targetEntityId.current = null; }
+      
+      if (dx !== 0 || dy !== 0) { 
+        mouseTargetPos.current = null; 
+        targetEntityId.current = null; 
+      }
       else if (mouseTargetPos.current) {
         const currentPos = gameStateRef.current.playerPos;
         const dist = Math.sqrt((mouseTargetPos.current.x - currentPos.x)**2 + (mouseTargetPos.current.y - currentPos.y)**2);
-        if (dist > 0.2) { dx = (mouseTargetPos.current.x - currentPos.x) / dist; dy = (mouseTargetPos.current.y - currentPos.y) / dist; }
+        if (dist > 0.3) { 
+          dx = (mouseTargetPos.current.x - currentPos.x) / dist; 
+          dy = (mouseTargetPos.current.y - currentPos.y) / dist; 
+        }
         else {
-          if (targetEntityId.current) { if (targetEntityId.current === 'water_point') triggerDrink(); else executeInteraction(targetEntityId.current); targetEntityId.current = null; }
+          if (targetEntityId.current) { 
+            if (targetEntityId.current === 'water_point') triggerDrink(); 
+            else executeInteraction(targetEntityId.current); 
+            targetEntityId.current = null; 
+          }
           mouseTargetPos.current = null;
         }
       }
     }
 
     let speedMod = 1.0;
-    let staminaDrainMod = 1.0;
-    let thirstDrainMod = 1.0;
-    
     if (gameStateRef.current.weather.type === 'snow') speedMod = 0.75;
-    if (gameStateRef.current.weather.type === 'rain') thirstDrainMod = 1.6;
-    if (gameStateRef.current.weather.type === 'snow') staminaDrainMod = 1.4;
 
     const accel = 60 * speedMod; const friction = 15;
     if (dx !== 0 || dy !== 0) {
@@ -679,10 +685,10 @@ const App: React.FC = () => {
         };
       }).filter(p => p.life > 0);
 
-      const campfires = prev.entities.filter(e => e.type === 'campfire');
+      const campfires = prev.entities.filter((e: Entity) => e.type === 'campfire');
       const newSmoke: any[] = [];
-      if (Math.random() < dt * 8) {
-        campfires.forEach(cf => {
+      if (Math.random() < dt * 6) {
+        campfires.forEach((cf: Entity) => {
           newSmoke.push({
             id: `smoke-${cf.id}-${now}-${Math.random()}`,
             type: 'smoke',
@@ -702,7 +708,7 @@ const App: React.FC = () => {
       let playerHealthMod = 0;
       let animalAttackTriggered = false;
 
-      const nextEntities = prev.entities.map(ent => {
+      const nextEntities = prev.entities.map((ent: Entity) => {
         if (['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'tent', 'workbench', 'hut', 'bridge', 'road', 'stone_wall', 'watchtower', 'castle_gate'].includes(ent.type)) return ent;
         const distToPlayer = Math.sqrt((ent.x - prev.playerPos.x)**2 + (ent.y - prev.playerPos.y)**2);
         let newX = ent.x; let newY = ent.y; let newState = ent.aiState || 'idle'; let targetX = ent.targetX; let targetY = ent.targetY; let attackCooldown = (ent.attackCooldown || 0) - dt;
@@ -738,8 +744,8 @@ const App: React.FC = () => {
 
       let finalState = { ...prev, entities: nextEntities, projectiles: nextProjectiles, particles: [...nextParticles, ...newSmoke], weather: nextWeather, isRecentlyAttackedByAnimal: animalAttackTriggered };
       
-      nextProjectiles.forEach(p => {
-        const hitIdx = nextEntities.findIndex(e => !['road', 'bridge', 'campfire'].includes(e.type) && Math.sqrt((e.x - p.x)**2 + (e.y - p.y)**2) < 0.8);
+      nextProjectiles.forEach((p: Projectile) => {
+        const hitIdx = nextEntities.findIndex((e: Entity) => !['road', 'bridge', 'campfire'].includes(e.type) && Math.sqrt((e.x - p.x)**2 + (e.y - p.y)**2) < 0.8);
         if (hitIdx > -1) {
           const target = nextEntities[hitIdx]; const isHostile = ['bear', 'scorpion', 'crab'].includes(target.type); target.health -= p.damage; target.aiState = isHostile ? 'hunting' : 'fleeing'; target.isFleeing = !isHostile; p.life = 0; if (target.health <= 0) finalState = handleEntityDeath(target, finalState);
         }
@@ -762,7 +768,7 @@ const App: React.FC = () => {
           lastCombatTime = now;
         }
       }
-      const hungerDrain = 0.0007; const thirstDrain = 0.0010 * thirstDrainMod;
+      const hungerDrain = 0.0007; const thirstDrain = 0.0010;
       if (prev.playerStats.hunger <= 0 || prev.playerStats.thirst <= 0) nextHealth -= 0.1;
       
       if (nextHealth <= 0) {
@@ -784,7 +790,7 @@ const App: React.FC = () => {
         const itemsToUse = gameStateRef.current.inventory.filter((i: Item) => ['tool', 'weapon', 'food'].includes(i.type));
         const uniqueItems: Item[] = [];
         const seenIds = new Set();
-        itemsToUse.forEach(i => {
+        itemsToUse.forEach((i: Item) => {
            if (!seenIds.has(i.id)) {
              seenIds.add(i.id);
              uniqueItems.push(i);
@@ -802,25 +808,44 @@ const App: React.FC = () => {
       if ((e.target as HTMLElement).tagName !== 'CANVAS') return;
       if (e.button === 2 || e.button === 1) { isPanning.current = true; lastMousePos.current = { x: e.clientX, y: e.clientY }; e.preventDefault(); }
       else if (e.button === 0 && !isPaused && !isResting) {
-        const worldPos = screenToWorld(e.clientX, e.clientY); const state = gameStateRef.current;
+        const worldPos = screenToWorld(e.clientX, e.clientY); 
+        const state = gameStateRef.current;
+        if (!worldPos) return;
+
         if (state.playerStats.equippedItemId === 'bow') {
           const arrowIdx = state.inventory.findIndex((i: Item) => i.id === 'arrow');
-          if (arrowIdx > -1 && worldPos) {
+          if (arrowIdx > -1) {
             const adx = worldPos.x - state.playerPos.x; const ady = worldPos.y - state.playerPos.y; const adist = Math.sqrt(adx*adx + ady*ady);
             if (adist > 0.1) {
               const speed = 12; const newProj: Projectile = { id: `arrow-${Date.now()}`, x: state.playerPos.x, y: state.playerPos.y, vx: (adx / adist) * speed, vy: (ady / adist) * speed, damage: 5, ownerId: 'player', life: 2.0, trail: [] };
               setGameState(prev => {
-                const ni = [...prev.inventory]; ni[arrowIdx].quantity -= 1; let newEquippedId = prev.playerStats.equippedItemId; const bowIdx = ni.findIndex(i => i.id === 'bow'); if (bowIdx > -1) { const bow = { ...ni[bowIdx] }; if (bow.durability !== undefined) { bow.durability -= 1; if (bow.durability <= 0) { ni.splice(bowIdx, 1); showMessage('broken'); newEquippedId = null; } else ni[bowIdx] = bow; } } const filteredInv = ni.filter(i => i.quantity > 0);
+                const ni = [...prev.inventory]; ni[arrowIdx].quantity -= 1; let newEquippedId = prev.playerStats.equippedItemId; const bowIdx = ni.findIndex((i: Item) => i.id === 'bow'); if (bowIdx > -1) { const bow = { ...ni[bowIdx] }; if (bow.durability !== undefined) { bow.durability -= 1; if (bow.durability <= 0) { ni.splice(bowIdx, 1); showMessage('broken'); newEquippedId = null; } else ni[bowIdx] = bow; } } const filteredInv = ni.filter((i: Item) => i.quantity > 0);
                 return { ...prev, inventory: filteredInv, playerStats: { ...prev.playerStats, equippedItemId: newEquippedId }, projectiles: [...prev.projectiles, newProj] };
               });
               SoundManager.playToolAction('bow'); return;
             }
           } else { showMessage('Out of arrows!', true); }
         }
-        if (worldPos) {
-          const clickedEntity = state.entities.find((ent: any) => Math.sqrt((ent.x - worldPos.x)**2 + (ent.y - worldPos.y)**2) < 2.0);
-          if (clickedEntity) { const mdist = Math.sqrt((clickedEntity.x - state.playerPos.x)**2 + (clickedEntity.y - state.playerPos.y)**2); if (mdist < 2.0) executeInteraction(clickedEntity.id); else { mouseTargetPos.current = { x: clickedEntity.x, y: clickedEntity.y }; targetEntityId.current = clickedEntity.id; } }
-          else { const tile = getTileType(worldPos.x, worldPos.y); if (tile === 'water') { mouseTargetPos.current = worldPos; targetEntityId.current = 'water_point'; } else { mouseTargetPos.current = worldPos; targetEntityId.current = null; } }
+        
+        const clickedEntity = state.entities.find((ent: Entity) => Math.sqrt((ent.x - worldPos.x)**2 + (ent.y - worldPos.y)**2) < 2.0);
+        if (clickedEntity) { 
+          const mdist = Math.sqrt((clickedEntity.x - state.playerPos.x)**2 + (clickedEntity.y - state.playerPos.y)**2); 
+          if (mdist < 1.8) {
+            executeInteraction(clickedEntity.id); 
+          } else { 
+            mouseTargetPos.current = { x: clickedEntity.x, y: clickedEntity.y }; 
+            targetEntityId.current = clickedEntity.id; 
+          } 
+        }
+        else { 
+          const tile = getTileType(worldPos.x, worldPos.y); 
+          if (tile === 'water') { 
+            mouseTargetPos.current = worldPos; 
+            targetEntityId.current = 'water_point'; 
+          } else { 
+            mouseTargetPos.current = worldPos; 
+            targetEntityId.current = null; 
+          } 
         }
       }
     };
@@ -832,10 +857,10 @@ const App: React.FC = () => {
   }, [handleInteract, uiState, handleHUDAction, isResting, screenToWorld, showMessage, executeInteraction, isPaused]);
 
   if (!gameState.gameStarted) {
-    return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(4000), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: { ...INITIAL_STATS, character: prev.playerStats.character } })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
+    return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(1500), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: { ...INITIAL_STATS, character: prev.playerStats.character } })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
   }
 
-  const isNearWorkbench = !!gameState.entities.find(e => e.type === 'workbench' && Math.sqrt((e.x - gameState.playerPos.x)**2 + (e.y - gameState.playerPos.y)**2) < 2.5);
+  const isNearWorkbench = !!gameState.entities.find((e: Entity) => e.type === 'workbench' && Math.sqrt((e.x - gameState.playerPos.x)**2 + (e.y - gameState.playerPos.y)**2) < 2.5);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-stone-950">
@@ -884,7 +909,7 @@ const App: React.FC = () => {
              Object.entries(recipe.ingredients).forEach(([id, qty]) => {
                let remainingToRemove = qty as number;
                while (remainingToRemove > 0) {
-                 const idx = ni.findIndex(i => i.id === id);
+                 const idx = ni.findIndex((i: Item) => i.id === id);
                  if (idx > -1) {
                    const remove = Math.min(remainingToRemove, ni[idx].quantity);
                    ni[idx] = { ...ni[idx], quantity: ni[idx].quantity - remove };
@@ -916,7 +941,7 @@ const App: React.FC = () => {
              
              let newEquippedId = prev.playerStats.equippedItemId;
              if (!placedDirectly && (newItemTemplate.type === 'tool' || newItemTemplate.type === 'weapon')) {
-                const justAdded = ni.find(i => i.id === newItemTemplate.id);
+                const justAdded = ni.find((i: Item) => i.id === newItemTemplate.id);
                 if (justAdded) newEquippedId = justAdded.id;
              }
              return { ...prev, inventory: ni, entities: updatedEntities, playerStats: { ...prev.playerStats, equippedItemId: newEquippedId } };
