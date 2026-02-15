@@ -7,25 +7,22 @@ import { Crafting } from './components/Crafting';
 import { MobileControls } from './components/MobileControls';
 import { MainMenu } from './components/MainMenu';
 import { SoundManager } from './components/SoundManager';
-import { PlayerStats, Item, Entity, GameState, EntityType, WeatherType, TileType, FacingDirection, GameSettings, Language } from './types';
-import { INITIAL_STATS, WORLD_SIZE, ITEMS, TIME_SCALE, RECIPES, SAVE_KEY, TRANSLATIONS, TILE_WIDTH, TILE_HEIGHT } from './constants';
+import { PlayerStats, Item, Entity, GameState, EntityType, TileType, GameSettings, Language } from './types';
+import { INITIAL_STATS, WORLD_SIZE, ITEMS, TIME_SCALE, RECIPES, TRANSLATIONS, TILE_WIDTH, TILE_HEIGHT } from './constants';
 
 export const getTileType = (x: number, y: number, level: number = 1): TileType => {
   const dx = x - WORLD_SIZE / 2;
   const dy = y - WORLD_SIZE / 2;
   const distToCenter = Math.sqrt(dx * dx + dy * dy);
-  const borderSize = Math.max(0, level >= 5 ? 0 : level >= 3 ? 2 : 4);
+  const borderSize = 4;
   
   if (x < borderSize || x >= WORLD_SIZE - borderSize || y < borderSize || y >= WORLD_SIZE - borderSize) return 'water';
-  if (level >= 3 && x > WORLD_SIZE * 0.65 && y > WORLD_SIZE * 0.65) return 'desert_tile';
-  if (level >= 5 && x < WORLD_SIZE * 0.35 && y < WORLD_SIZE * 0.35) return 'snow_tile';
   if (distToCenter < 5) return 'water';
   if (distToCenter < 7.5) return 'sand';
 
   const n1 = Math.sin(x * 0.4) * Math.cos(y * 0.4);
   const n2 = Math.sin(x * 0.2 + y * 0.2) * 0.5;
-  const n3 = Math.cos(x * 1.5) * Math.sin(y * 1.5) * 0.1;
-  const combinedNoise = n1 * 0.6 + n2 * 0.3 + n3 * 0.1;
+  const combinedNoise = n1 * 0.6 + n2 * 0.3;
 
   if (combinedNoise > 0.65) return 'water';
   if (combinedNoise > 0.45) return 'sand';
@@ -38,7 +35,7 @@ const App: React.FC = () => {
     playerStats: INITIAL_STATS,
     inventory: [],
     entities: [],
-    projectiles: [], // Added missing projectiles array
+    projectiles: [],
     time: 600,
     isDay: true,
     gameStarted: false,
@@ -47,130 +44,57 @@ const App: React.FC = () => {
     viewConfig: { zoom: 1.0, rotation: 0, cameraOffsetX: 0, cameraOffsetY: 0 }
   });
 
+  const gameStateRef = useRef<GameState>(gameState);
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
   const [uiState, setUiState] = useState({ inventoryOpen: false, craftingOpen: false, settingsOpen: false, message: '' });
   const [isResting, setIsResting] = useState(false);
-  const [gameOver, setGameOver] = useState(false);
-  const [isPanning, setIsPanning] = useState(false);
-  const lastMouseClientPos = useRef<{ x: number; y: number } | null>(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const isMobile = useRef(/Android|webOS|iPhone|iPad|iPod/i.test(navigator.userAgent)).current;
   
   const requestRef = useRef<number>(0);
-  const spawnTimerRef = useRef<number>(0);
-  const footstepAccumulator = useRef<number>(0);
-  
-  const inputDir = useRef({ x: 0, y: 0 });
-  const velocity = useRef({ x: 0, y: 0 });
   const activeKeys = useRef<Set<string>>(new Set());
-  const isInteracting = useRef(false);
-  const lastInteractTimeInput = useRef(0);
+  const velocity = useRef({ x: 0, y: 0 });
+  const lastUpdate = useRef(performance.now());
+  
+  // Mouse target logic
+  const mouseTargetPos = useRef<{ x: number, y: number } | null>(null);
+  const targetEntityId = useRef<string | null>(null);
+  const isPanning = useRef(false);
+  const lastMousePos = useRef({ x: 0, y: 0 });
 
   const lang = gameState.settings.language;
   const t = (key: string) => TRANSLATIONS[lang][key] || key;
-
-  // Determine if the player is in a critical state (Health, Hunger, or Thirst < 20%)
-  const isCritical = useMemo(() => {
-    const s = gameState.playerStats;
-    return s.health < 20 || s.hunger < 20 || s.thirst < 20;
-  }, [gameState.playerStats]);
 
   const showMessage = useCallback((msgKey: string, direct: boolean = false) => {
     const msg = direct ? msgKey : t(msgKey);
     setUiState(prev => ({ ...prev, message: msg }));
     setTimeout(() => setUiState(prev => ({ ...prev, message: '' })), 4000);
-  }, [lang, t]);
+  }, [t]);
 
-  const addXP = useCallback((amount: number) => {
-    setGameState(prev => {
-      let newXP = prev.playerStats.xp + amount;
-      let newLevel = prev.playerStats.level;
-      let leveledUp = false;
-      if (newXP >= 100 * newLevel) {
-        newXP -= 100 * newLevel;
-        newLevel += 1;
-        leveledUp = true;
-      }
-      if (leveledUp) {
-        SoundManager.playUI('fanfare');
-        const rewards = RECIPES.filter(r => r.levelRequired === newLevel).map(r => r.name).join(", ");
-        showMessage(`${t('level_up')} ${newLevel}${rewards ? `\n🎁 ${rewards}` : ""}`, true);
-      }
-      return {
-        ...prev,
-        playerStats: {
-          ...prev.playerStats,
-          level: newLevel, xp: newXP,
-          maxHealth: leveledUp ? prev.playerStats.maxHealth + 10 : prev.playerStats.maxHealth,
-          health: leveledUp ? prev.playerStats.maxHealth + 10 : prev.playerStats.health,
-        }
-      };
-    });
-  }, [showMessage, t]);
-
-  const handleInventoryAction = useCallback((action: 'use' | 'reorder' | 'equip', data: any) => {
-    setGameState(prev => {
-      let ni = [...prev.inventory], ns = {...prev.playerStats};
-      if (action === 'use') {
-        const item = data as Item;
-        if (item.type === 'food' && item.effect) {
-            ns.hunger = Math.min(100, ns.hunger + (item.effect.hunger || 0));
-            ns.thirst = Math.min(100, ns.thirst + (item.effect.thirst || 0));
-            const idx = ni.findIndex(i => i.id === item.id);
-            if (idx > -1) { ni[idx].quantity -= 1; if (ni[idx].quantity <= 0) ni.splice(idx, 1); }
-            SoundManager.playGather('bush_berry');
-        } else if (item.type === 'tool') {
-          ns.equippedItemId = ns.equippedItemId === item.id ? null : item.id;
-          SoundManager.playUI('click');
-        }
-      } else if (action === 'reorder') {
-        const { fromIdx, toIdx } = data; const it = ni[fromIdx];
-        ni.splice(fromIdx, 1); ni.splice(toIdx, 0, it);
-      } else if (action === 'equip') {
-        ns.equippedItemId = (data as Item).id;
-        SoundManager.playUI('click');
-      }
-      return {...prev, inventory: ni, playerStats: ns};
-    });
-  }, []);
-
-  const spawnEntities = useCallback((count: number, level: number, specificType?: EntityType[]) => {
+  const spawnEntities = useCallback((count: number) => {
     const newEnts: Entity[] = [];
-    const baseTypes = ['tree', 'rock', 'bush', 'deer', 'rabbit'];
-    
     let spawned = 0;
     while (spawned < count) {
       const rx = Math.random() * WORLD_SIZE;
       const ry = Math.random() * WORLD_SIZE;
-      const tile = getTileType(rx, ry, level);
+      const tile = getTileType(rx, ry);
+      const distToSpawn = Math.sqrt((rx - WORLD_SIZE/2)**2 + (ry - (WORLD_SIZE/2 + 8))**2);
       
-      if (tile !== 'water') {
-        let category = baseTypes[Math.floor(Math.random() * baseTypes.length)];
-        if (tile === 'grass' && Math.random() < 0.4) category = Math.random() > 0.5 ? 'tree' : 'rock';
-        if (tile === 'desert_tile') category = Math.random() > 0.7 ? 'tree' : (Math.random() > 0.4 ? 'rock' : 'scorpion');
+      if (tile !== 'water' && distToSpawn > 3) {
+        let type: EntityType = 'tree_oak';
+        const rand = Math.random();
+        if (rand > 0.8) type = 'deer';
+        else if (rand > 0.6) type = 'rabbit';
+        else if (rand > 0.4) type = 'rock_standard';
+        else if (rand > 0.2) type = 'bush_berry';
+        else type = 'tree_oak';
 
-        let finalType: EntityType = 'rock_standard';
-        if (category === 'tree') {
-            if (tile === 'desert_tile') finalType = 'tree_palm';
-            else finalType = Math.random() > 0.5 ? 'tree_oak' : 'tree_pine';
-        } else if (category === 'rock') {
-            const r = Math.random();
-            if (r > 0.85) finalType = 'rock_iron';
-            else finalType = 'rock_standard';
-        } else if (category === 'bush') {
-            const r = Math.random();
-            if (r > 0.7) finalType = 'bush_berry';
-            else if (r > 0.4) finalType = 'bush_flower';
-            else finalType = 'bush_dry';
-        } else {
-            finalType = category as EntityType;
-        }
-        
         newEnts.push({
-          id: `ent-${Date.now()}-${spawned}-${Math.random()}`, x: rx, y: ry, type: finalType,
-          health: ['deer', 'bear'].includes(finalType) ? 8 : (finalType === 'rabbit' ? 2 : 5),
-          maxHealth: ['deer', 'bear'].includes(finalType) ? 8 : (finalType === 'rabbit' ? 2 : 5),
-          targetX: rx,
-          targetY: ry,
-          spawnTime: Date.now()
+          id: `ent-${spawned}-${Date.now()}`,
+          x: rx, y: ry, type,
+          health: 5, maxHealth: 5
         });
         spawned++;
       }
@@ -180,358 +104,561 @@ const App: React.FC = () => {
 
   const triggerRest = useCallback(() => {
     if (isResting) return;
+
+    const state = gameStateRef.current;
+    if (!state) return;
+
+    const nearbyTent = state.entities.find(e => 
+      e.type === 'tent' && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 2.0
+    );
+
+    if (!nearbyTent) {
+      showMessage('Need a tent to rest!', true);
+      return;
+    }
+
     setIsResting(true);
     SoundManager.playUI('click');
-    
+    showMessage('Resting in tent... Zzz', true);
     setTimeout(() => {
       setGameState(prev => ({
         ...prev,
-        time: (prev.time + 500) % 2400,
         playerStats: {
           ...prev.playerStats,
           health: Math.min(prev.playerStats.maxHealth, prev.playerStats.health + 25),
-          stamina: prev.playerStats.maxStamina
+          hunger: Math.max(0, prev.playerStats.hunger - 10),
+          thirst: Math.max(0, prev.playerStats.thirst - 10)
         }
       }));
-      showMessage('Rested for 5 hours', true);
-    }, 1000);
-
-    setTimeout(() => {
       setIsResting(false);
-    }, 2500);
+    }, 2000);
   }, [isResting, showMessage]);
 
-  const interact = useCallback(() => {
-    if (isResting) return;
-    setGameState(prev => {
-      const { x: px, y: py } = prev.playerPos;
-      const range = (prev.playerStats.equippedItemId === 'bow' && prev.inventory.find(i => i.id === 'arrow')?.quantity) ? 5 : 1.8;
-      const idx = prev.entities.findIndex(e => Math.sqrt((e.x - px)**2 + (e.y - py)**2) <= range);
-      
-      const newStats = { ...prev.playerStats, lastInteractTime: Date.now() };
+  const triggerDrink = useCallback(() => {
+    SoundManager.playGather('bush_berry');
+    showMessage('Drinking fresh water...', true);
+    setGameState(prev => ({
+      ...prev,
+      playerStats: {
+        ...prev.playerStats,
+        thirst: Math.min(prev.playerStats.maxThirst, prev.playerStats.thirst + 35)
+      }
+    }));
+  }, [showMessage]);
 
-      if (idx === -1) return { ...prev, playerStats: newStats };
+  const executeInteraction = useCallback((entityId: string) => {
+    setGameState(prev => {
+      const target = prev.entities.find(e => e.id === entityId);
+      if (!target) return prev;
+
+      const dist = Math.sqrt((target.x - prev.playerPos.x)**2 + (target.y - prev.playerPos.y)**2);
+      if (dist > 1.8) return prev;
+
+      SoundManager.playGather(target.type);
+      const updatedEntities = prev.entities.map(e => 
+        e.id === target.id ? { ...e, health: e.health - 1 } : e
+      ).filter(e => e.health > 0);
+
+      let rewardId = 'berry';
+      let qty = 1;
+
+      if (target.type.includes('tree')) rewardId = 'wood';
+      else if (target.type.includes('rock')) rewardId = 'stone';
+      else if (target.type === 'deer' || target.type === 'bear') {
+        rewardId = 'meat_raw';
+        qty = target.type === 'bear' ? 3 : 2;
+      } else if (target.type === 'rabbit') {
+        rewardId = 'meat_raw';
+        qty = 1;
+      }
       
-      const ent = prev.entities[idx];
+      const rewardItem = { ...ITEMS[rewardId], quantity: qty };
       const newInv = [...prev.inventory];
-      const newEnts = [...prev.entities];
+      const existingIdx = newInv.findIndex(i => i.id === rewardItem.id);
+      if (existingIdx > -1) newInv[existingIdx].quantity += qty;
+      else newInv.push(rewardItem);
 
-      if (ent.type === 'well') { SoundManager.playGather('bush_berry'); return { ...prev, playerStats: { ...newStats, thirst: Math.min(100, newStats.thirst + 40) } }; }
-      
-      if (ent.type === 'tent' || ent.type === 'hut') { 
-        triggerRest(); 
-        return { ...prev, playerStats: newStats }; 
-      }
-      
-      if (ent.type === 'workbench') { setUiState(u => ({ ...u, craftingOpen: true })); return { ...prev, playerStats: newStats }; }
-
-      SoundManager.playGather(ent.type);
-      
-      const dmg = prev.playerStats.equippedItemId === 'axe' ? 3 : 1;
-      const updatedHealth = ent.health - dmg;
-
-      if (updatedHealth <= 0) {
-        newEnts.splice(idx, 1);
-        let item = null;
-        if (ent.type.startsWith('tree')) item = { ...ITEMS.wood, quantity: 3 };
-        else if (ent.type.startsWith('rock')) item = { ...ITEMS.stone, quantity: 2 };
-        else if (ent.type === 'bush_berry') item = { ...ITEMS.berry, quantity: 2 };
-        else if (['deer', 'bear', 'rabbit', 'scorpion'].includes(ent.type)) item = { ...ITEMS.meat_raw, quantity: 2 };
-        
-        if (item) {
-          const invIdx = newInv.findIndex(i => i.id === item!.id && i.quantity < (i.maxStack || 99));
-          if (invIdx > -1) newInv[invIdx].quantity += item.quantity; else newInv.push(item);
-        }
-        addXP(10);
-      } else {
-        newEnts[idx] = { ...ent, health: updatedHealth, isFleeing: true, targetX: ent.x + (ent.x - px) * 5, targetY: ent.y + (ent.y - py) * 5 };
-        addXP(3);
-      }
-      return { ...prev, entities: newEnts, inventory: newInv, playerStats: { ...newStats, stamina: Math.max(0, newStats.stamina - 1) } };
+      return {
+        ...prev,
+        entities: updatedEntities,
+        inventory: newInv,
+        playerStats: { ...prev.playerStats, lastInteractTime: Date.now() }
+      };
     });
-  }, [addXP, triggerRest]);
+  }, []);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    const key = e.key.toLowerCase();
-    if (isResting) return;
-    
-    if (['1', '2', '3', '4', '5'].includes(key)) {
-      const idx = parseInt(key) - 1;
-      const item = gameState.inventory[idx];
-      if (item) handleInventoryAction('use', item);
-      e.preventDefault();
+  const handleInteract = useCallback(() => {
+    const state = gameStateRef.current;
+    if (!state) return;
+
+    const nearest = state.entities.find(e => 
+      Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.5
+    );
+    if (nearest) {
+      executeInteraction(nearest.id);
       return;
-    }
+    } 
 
-    if (key === 'f') {
-        setUiState(u => ({...u, inventoryOpen: !u.inventoryOpen, craftingOpen: false, settingsOpen: false}));
-        e.preventDefault();
-        return;
-    }
-
-    if (key === 'c') {
-        setUiState(u => ({...u, craftingOpen: !u.craftingOpen, inventoryOpen: false, settingsOpen: false}));
-        e.preventDefault();
-        return;
-    }
-
-    if (uiState.craftingOpen || uiState.inventoryOpen || uiState.settingsOpen) {
-      if (key === 'escape') setUiState(p => ({...p, craftingOpen: false, inventoryOpen: false, settingsOpen: false}));
-      return;
-    }
-
-    if (['w', 'a', 's', 'd', 'arrowup', 'arrowleft', 'arrowdown', 'arrowright'].includes(key)) {
-        if (!activeKeys.current.has(key)) { 
-          activeKeys.current.add(key); 
-          let dx = 0, dy = 0;
-          if (activeKeys.current.has('w') || activeKeys.current.has('arrowup')) dy = -1;
-          if (activeKeys.current.has('s') || activeKeys.current.has('arrowdown')) dy = 1;
-          if (activeKeys.current.has('a') || activeKeys.current.has('arrowleft')) dx = -1;
-          if (activeKeys.current.has('d') || activeKeys.current.has('arrowright')) dx = 1;
-          inputDir.current = { x: dx, y: dy };
+    let nearWater = false;
+    for (let dx = -1.2; dx <= 1.2; dx += 0.4) {
+      for (let dy = -1.2; dy <= 1.2; dy += 0.4) {
+        if (getTileType(state.playerPos.x + dx, state.playerPos.y + dy) === 'water') {
+          nearWater = true;
+          break;
         }
-        e.preventDefault();
-    } else if (key === 'e') {
-        if (!isInteracting.current) { isInteracting.current = true; lastInteractTimeInput.current = Date.now(); interact(); }
-        e.preventDefault();
-    } else if (key === 'escape' && gameState.gameStarted) {
-        setGameState(p => ({...p, gameStarted: false}));
-        e.preventDefault();
-    }
-  }, [interact, uiState, gameState.gameStarted, gameState.inventory, handleInventoryAction, isResting]);
-
-  const handleKeyUp = useCallback((e: KeyboardEvent) => {
-    const key = e.key.toLowerCase();
-    if (['w', 'a', 's', 'd', 'arrowup', 'arrowleft', 'arrowdown', 'arrowright'].includes(key)) {
-        activeKeys.current.delete(key);
-        let dx = 0, dy = 0;
-        if (activeKeys.current.has('w') || activeKeys.current.has('arrowup')) dy = -1;
-        if (activeKeys.current.has('s') || activeKeys.current.has('arrowdown')) dy = 1;
-        if (activeKeys.current.has('a') || activeKeys.current.has('arrowleft')) dx = -1;
-        if (activeKeys.current.has('d') || activeKeys.current.has('arrowright')) dx = 1;
-        inputDir.current = { x: dx, y: dy };
-    } else if (key === 'e') {
-        isInteracting.current = false;
-    }
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
-  }, [handleKeyDown, handleKeyUp]);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const tick = useCallback(() => {
-    if (!gameState.gameStarted || gameOver || isResting) {
-        requestRef.current = requestAnimationFrame(tick);
-        return;
+      }
+      if (nearWater) break;
     }
 
+    if (nearWater) {
+      triggerDrink();
+      return;
+    }
+
+    triggerRest();
+  }, [triggerRest, executeInteraction, triggerDrink]);
+
+  const placeStructure = useCallback((item: Item) => {
     setGameState(prev => {
-      const now = Date.now();
-      const newTime = (prev.time + TIME_SCALE) % 2400;
+      const newEntity: Entity = {
+        id: `struct-${Date.now()}`,
+        x: prev.playerPos.x,
+        y: prev.playerPos.y,
+        type: item.id as EntityType,
+        health: 10,
+        maxHealth: 10
+      };
 
-      if (isInteracting.current && now - lastInteractTimeInput.current > 350) {
-        lastInteractTimeInput.current = now;
-        interact();
+      const newInv = prev.inventory.map(i => i.id === item.id ? { ...i, quantity: i.quantity - 1 } : i).filter(i => i.quantity > 0);
+
+      showMessage(`Placed: ${item.name}`, true);
+      SoundManager.playUI('click');
+
+      return {
+        ...prev,
+        inventory: newInv,
+        entities: [...prev.entities, newEntity]
+      };
+    });
+  }, [showMessage]);
+
+  const handleZoom = useCallback((delta: number) => {
+    setGameState(prev => ({
+      ...prev,
+      viewConfig: {
+        ...prev.viewConfig,
+        zoom: Math.max(0.4, Math.min(2.5, prev.viewConfig.zoom + delta))
       }
+    }));
+  }, []);
 
-      const friction = 0.82;
-      const accel = 0.007;
-      velocity.current.x = velocity.current.x * friction + inputDir.current.x * accel;
-      velocity.current.y = velocity.current.y * friction + inputDir.current.y * accel;
-      
-      const nextX = Math.max(0, Math.min(WORLD_SIZE - 1, prev.playerPos.x + velocity.current.x));
-      const nextY = Math.max(0, Math.min(WORLD_SIZE - 1, prev.playerPos.y + velocity.current.y));
-      
-      const targetTile = getTileType(nextX, nextY, prev.playerStats.level);
-      const canMove = targetTile !== 'water';
-      
-      const finalX = canMove ? nextX : prev.playerPos.x;
-      const finalY = canMove ? nextY : prev.playerPos.y;
+  const handleRotate = useCallback((delta: number) => {
+    setGameState(prev => ({
+      ...prev,
+      viewConfig: {
+        ...prev.viewConfig,
+        rotation: (prev.viewConfig.rotation + delta + 360) % 360
+      }
+    }));
+  }, []);
 
-      const mag = Math.sqrt(velocity.current.x**2 + velocity.current.y**2);
-      footstepAccumulator.current += mag;
+  const screenToWorld = useCallback((sx: number, sy: number) => {
+    const state = gameStateRef.current;
+    if (!state) return null;
 
-      let newFacing = prev.playerStats.facing;
-      if (mag > 0.01) {
-        const cx = velocity.current.x, cy = velocity.current.y;
-        if (cx > 0.001 && cy > 0.001) newFacing = 'se';
-        else if (cx < -0.001 && cy > 0.001) newFacing = 'sw';
-        else if (cx > 0.001 && cy < -0.001) newFacing = 'ne';
-        else if (cx < -0.001 && cy < -0.001) newFacing = 'nw';
-        else if (cx > 0.001) newFacing = 'se'; else if (cx < -0.001) newFacing = 'sw';
-        else if (cy > 0.001) newFacing = 'se'; else if (cy < -0.001) newFacing = 'ne';
+    const { zoom, rotation, cameraOffsetX, cameraOffsetY } = state.viewConfig;
+    const tw = TILE_WIDTH * zoom;
+    const th = TILE_HEIGHT * zoom;
 
-        if (footstepAccumulator.current > 0.3 && canMove) {
-          footstepAccumulator.current = 0;
-          SoundManager.playFootstep(getTileType(finalX, finalY), mag * 20);
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+
+    const getTransformed = (wx: number, wy: number, rot: number) => {
+      if (rot === 90) return { tx: wy, ty: WORLD_SIZE - 1 - wx };
+      if (rot === 180) return { tx: WORLD_SIZE - 1 - wx, ty: WORLD_SIZE - 1 - wy };
+      if (rot === 270) return { tx: WORLD_SIZE - 1 - wy, ty: wx };
+      return { tx: wx, ty: wy };
+    };
+
+    const pTrans = getTransformed(state.playerPos.x, state.playerPos.y, rotation);
+    const pScreenX = pTrans.tx * tw;
+    const pScreenY = pTrans.ty * th;
+
+    const offsetX = centerX - (pScreenX + tw/2) + cameraOffsetX;
+    const offsetY = centerY - (pScreenY + th/2) + cameraOffsetY;
+
+    const tx = (sx - offsetX) / tw;
+    const ty = (sy - offsetY) / th;
+
+    let wx = 0, wy = 0;
+    if (rotation === 0) { wx = tx; wy = ty; }
+    else if (rotation === 90) { wx = WORLD_SIZE - 1 - ty; wy = tx; }
+    else if (rotation === 180) { wx = WORLD_SIZE - 1 - tx; wy = WORLD_SIZE - 1 - wy; }
+    else if (rotation === 270) { wx = ty; wy = WORLD_SIZE - 1 - tx; }
+
+    return { x: wx, y: wy };
+  }, []);
+
+  const update = useCallback((time: number) => {
+    const dt = (time - lastUpdate.current) / 1000;
+    lastUpdate.current = time;
+
+    if (!gameStateRef.current.gameStarted) {
+      requestRef.current = requestAnimationFrame(update);
+      return;
+    }
+
+    const { inventoryOpen, craftingOpen, settingsOpen } = uiState;
+    const isPaused = isResting || inventoryOpen || craftingOpen || settingsOpen;
+
+    let dx = 0, dy = 0;
+    
+    if (!isPaused) {
+      if (activeKeys.current.has('w')) dy -= 1;
+      if (activeKeys.current.has('s')) dy += 1;
+      if (activeKeys.current.has('a')) dx -= 1;
+      if (activeKeys.current.has('d')) dx += 1;
+
+      if (dx !== 0 || dy !== 0) {
+        mouseTargetPos.current = null;
+        targetEntityId.current = null;
+      } else if (mouseTargetPos.current) {
+        const currentPos = gameStateRef.current.playerPos;
+        const dist = Math.sqrt((mouseTargetPos.current.x - currentPos.x)**2 + (mouseTargetPos.current.y - currentPos.y)**2);
+        const stopDist = targetEntityId.current ? 1.2 : 0.15;
+
+        if (dist > stopDist) {
+          dx = (mouseTargetPos.current.x - currentPos.x) / dist;
+          dy = (mouseTargetPos.current.y - currentPos.y) / dist;
+        } else {
+          if (targetEntityId.current) {
+            executeInteraction(targetEntityId.current);
+            targetEntityId.current = null;
+          }
+          mouseTargetPos.current = null;
         }
       }
+    }
 
-      const animals = ['deer', 'rabbit', 'scorpion', 'bear'];
-      let finalEntities = prev.entities.map(ent => {
-        if (!animals.includes(ent.type)) return ent;
-        const dist = Math.sqrt((ent.x - prev.playerPos.x)**2 + (ent.y - prev.playerPos.y)**2);
-        let moveX = ent.x, moveY = ent.y;
-        let targetX = ent.targetX ?? ent.x, targetY = ent.targetY ?? ent.y;
-        let isFleeing = ent.isFleeing ?? false;
+    const accel = 35;
+    const friction = 14;
+    if (dx !== 0 || dy !== 0) {
+      const mag = Math.sqrt(dx*dx + dy*dy);
+      velocity.current.x += (dx / mag) * accel * dt;
+      velocity.current.y += (dy / mag) * accel * dt;
+    }
 
-        if (dist < (ent.type === 'rabbit' ? 4 : 6)) {
-          isFleeing = true;
-          const dx = ent.x - prev.playerPos.x, dy = ent.y - prev.playerPos.y;
-          const m = Math.sqrt(dx*dx + dy*dy);
-          targetX = ent.x + (dx/m)*4; targetY = ent.y + (dy/m)*4;
-        } else if (isFleeing && dist > 9) isFleeing = false;
+    velocity.current.x *= Math.max(0, 1 - friction * dt);
+    velocity.current.y *= Math.max(0, 1 - friction * dt);
 
-        if (!isFleeing && Math.random() < 0.005) {
-          targetX = ent.x + (Math.random()-0.5)*8; targetY = ent.y + (Math.random()-0.5)*8;
-        }
+    const speed = Math.sqrt(velocity.current.x**2 + velocity.current.y**2);
+    
+    setGameState(prev => {
+      if (isPaused) return { ...prev, time: (prev.time + 0.1) % 2400 };
 
-        targetX = Math.max(1, Math.min(WORLD_SIZE-1, targetX));
-        targetY = Math.max(1, Math.min(WORLD_SIZE-1, targetY));
-        if (getTileType(targetX, targetY) === 'water') { targetX = ent.x; targetY = ent.y; }
+      const nextX = prev.playerPos.x + velocity.current.x * dt;
+      const nextY = prev.playerPos.y + velocity.current.y * dt;
 
-        const speed = isFleeing ? 0.08 : 0.02;
-        const dx = targetX - ent.x, dy = targetY - ent.y;
-        const dM = Math.sqrt(dx*dx + dy*dy);
-        if (dM > 0.1) { moveX += (dx/dM)*speed; moveY += (dy/dM)*speed; }
+      const tile = getTileType(nextX, nextY);
+      const isBlocked = tile === 'water' || prev.entities.some(e => 
+        !['rabbit', 'scorpion', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - nextX)**2 + (e.y - nextY)**2) < 0.6
+      );
 
-        return { ...ent, x: moveX, y: moveY, targetX, targetY, isFleeing };
-      });
-
-      spawnTimerRef.current += TIME_SCALE;
-      if (spawnTimerRef.current > 60) {
-        spawnTimerRef.current = 0;
-        finalEntities = finalEntities.filter(e => {
-            const d = Math.sqrt((e.x - prev.playerPos.x)**2 + (e.y - prev.playerPos.y)**2);
-            return ['campfire', 'tent', 'hut', 'workbench', 'well'].includes(e.type) || d < 28;
-        });
-        if (finalEntities.length < 250) finalEntities.push(...spawnEntities(15, prev.playerStats.level));
+      let facing = prev.playerStats.facing;
+      if (Math.abs(velocity.current.x) > 0.1 || Math.abs(velocity.current.y) > 0.1) {
+        if (velocity.current.x > 0 && velocity.current.y > 0) facing = 'se';
+        else if (velocity.current.x < 0 && velocity.current.y > 0) facing = 'sw';
+        else if (velocity.current.x > 0 && velocity.current.y < 0) facing = 'ne';
+        else if (velocity.current.x < 0 && velocity.current.y < 0) facing = 'nw';
       }
 
       return {
-        ...prev, playerPos: { x: finalX, y: finalY },
-        time: newTime, isDay: newTime > 400 && newTime < 2000,
-        entities: finalEntities,
+        ...prev,
+        playerPos: isBlocked ? prev.playerPos : { x: nextX, y: nextY },
         playerStats: {
-          ...prev.playerStats, isWalking: mag > 0.001 && canMove, facing: newFacing,
-          hunger: Math.max(0, prev.playerStats.hunger - 0.006),
-          thirst: Math.max(0, prev.playerStats.thirst - 0.009),
-          health: Math.max(0, prev.playerStats.health + (prev.playerStats.hunger <= 0 ? -0.05 : 0))
-        }
+          ...prev.playerStats,
+          isWalking: speed > 0.5,
+          facing,
+          hunger: Math.max(0, prev.playerStats.hunger - 0.0015),
+          thirst: Math.max(0, prev.playerStats.thirst - 0.0025)
+        },
+        time: (prev.time + 0.1) % 2400
       };
     });
-    requestRef.current = requestAnimationFrame(tick);
-  }, [gameState.gameStarted, gameOver, interact, spawnEntities, isResting]);
+
+    requestRef.current = requestAnimationFrame(update);
+  }, [isResting, uiState, executeInteraction, triggerRest, triggerDrink]);
 
   useEffect(() => {
-    requestRef.current = requestAnimationFrame(tick);
+    requestRef.current = requestAnimationFrame(update);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [tick]);
+  }, [update]);
 
   useEffect(() => {
-    const initialEnts = spawnEntities(350, 1);
-    for (let i = 0; i < 8; i++) initialEnts.push({ id: `well-${i}`, x: Math.random()*WORLD_SIZE, y: Math.random()*WORLD_SIZE, type: 'well', health: 100, maxHealth: 100 });
-    setGameState(prev => ({ ...prev, entities: initialEnts }));
-  }, [spawnEntities]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      activeKeys.current.add(key);
+      if (key === 'f') setUiState(prev => ({ ...prev, inventoryOpen: !prev.inventoryOpen, craftingOpen: false, settingsOpen: false }));
+      if (key === 'c') setUiState(prev => ({ ...prev, craftingOpen: !prev.craftingOpen, inventoryOpen: false, settingsOpen: false }));
+      if (key === 'e') handleInteract();
+      if (key === 'escape') {
+        setUiState(prev => {
+          if (prev.craftingOpen || prev.inventoryOpen || prev.settingsOpen) {
+            return { ...prev, craftingOpen: false, inventoryOpen: false, settingsOpen: false };
+          } else {
+            // If no menus open, return to main menu
+            setGameState(g => ({ ...g, gameStarted: false }));
+            return prev;
+          }
+        });
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => activeKeys.current.delete(e.key.toLowerCase());
+    
+    const handleWheel = (e: WheelEvent) => {
+      handleZoom(e.deltaY > 0 ? -0.1 : 0.1);
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const isPaused = isResting || uiState.inventoryOpen || uiState.craftingOpen || uiState.settingsOpen;
+      
+      if (e.button === 2 || e.button === 1) {
+        isPanning.current = true;
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
+        e.preventDefault();
+      } else if (e.button === 0 && !isPaused) {
+        const worldPos = screenToWorld(e.clientX, e.clientY);
+        if (worldPos) {
+          const clickedEntity = gameStateRef.current?.entities.find(ent => 
+            Math.sqrt((ent.x - worldPos.x)**2 + (ent.y - worldPos.y)**2) < 0.8
+          );
+          if (clickedEntity) {
+            targetEntityId.current = clickedEntity.id;
+            mouseTargetPos.current = { x: clickedEntity.x, y: clickedEntity.y };
+          } else {
+            targetEntityId.current = null;
+            mouseTargetPos.current = worldPos;
+          }
+        }
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isPanning.current) {
+        const dx = e.clientX - lastMousePos.current.x;
+        const dy = e.clientY - lastMousePos.current.y;
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
+        setGameState(prev => ({
+          ...prev,
+          viewConfig: {
+            ...prev.viewConfig,
+            cameraOffsetX: prev.viewConfig.cameraOffsetX + dx,
+            cameraOffsetY: prev.viewConfig.cameraOffsetY + dy
+          }
+        }));
+      }
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 2 || e.button === 1) isPanning.current = false;
+    };
+
+    const handleContextMenu = (e: Event) => e.preventDefault();
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('wheel', handleWheel);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [handleInteract, handleZoom, screenToWorld, uiState, isResting]);
+
+  const handleHUDAction = useCallback((action: 'use' | 'reorder' | 'equip', data: any) => {
+    if (action === 'use') {
+       const item = data as Item;
+       if (item.type === 'food') {
+          setGameState(prev => ({
+            ...prev,
+            playerStats: {
+              ...prev.playerStats,
+              hunger: Math.min(100, prev.playerStats.hunger + (item.effect?.hunger || 0)),
+              thirst: Math.min(100, prev.playerStats.thirst + (item.effect?.thirst || 0)),
+              health: Math.min(prev.playerStats.maxHealth, prev.playerStats.health + (item.effect?.health || 0))
+            },
+            inventory: prev.inventory.map(i => i.id === item.id ? { ...i, quantity: i.quantity - 1 } : i).filter(i => i.quantity > 0)
+          }));
+          SoundManager.playGather('bush_berry');
+       } else if (item.type === 'structure') {
+          placeStructure(item);
+       } else if (item.type === 'tool') {
+          setGameState(prev => ({
+            ...prev,
+            playerStats: { ...prev.playerStats, equippedItemId: prev.playerStats.equippedItemId === item.id ? null : item.id }
+          }));
+          SoundManager.playUI('click');
+       }
+    } else if (action === 'equip') {
+      setGameState(prev => ({
+        ...prev,
+        playerStats: { ...prev.playerStats, equippedItemId: (data as Item).id }
+      }));
+      SoundManager.playUI('click');
+    } else if (action === 'reorder') {
+      setGameState(prev => {
+        const { fromIdx, toIdx } = data;
+        const ni = [...prev.inventory];
+        const it = ni[fromIdx];
+        ni.splice(fromIdx, 1);
+        ni.splice(toIdx, 0, it);
+        return { ...prev, inventory: ni };
+      });
+    }
+  }, [placeStructure]);
+
+  if (!gameState.gameStarted) {
+    return (
+      <MainMenu 
+        hasActiveSession={gameState.inventory.length > 0 || gameState.entities.length > 0}
+        onStart={() => {
+          SoundManager.init();
+          SoundManager.startForestAmbience();
+          setGameState(prev => ({ 
+            ...prev, 
+            gameStarted: true,
+            entities: prev.entities.length === 0 ? spawnEntities(120) : prev.entities
+          }));
+        }}
+        onContinue={() => {
+          SoundManager.init();
+          SoundManager.startForestAmbience();
+          setGameState(prev => ({ ...prev, gameStarted: true }));
+        }}
+        settings={gameState.settings}
+        onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))}
+        playerStats={gameState.playerStats}
+        onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))}
+      />
+    );
+  }
+
+  const isNearWorkbench = !!gameState.entities.find(e => e.type === 'workbench' && Math.sqrt((e.x - gameState.playerPos.x)**2 + (e.y - gameState.playerPos.y)**2) < 2.5);
 
   return (
-    <div 
-      className="relative w-screen h-screen overflow-hidden select-none bg-stone-950 text-stone-100"
-      onWheel={e => setGameState(p => {
-        let nz = Math.max(0.5, Math.min(2.0, p.viewConfig.zoom - e.deltaY * 0.001));
-        return {...p, viewConfig: {...p.viewConfig, zoom: nz}};
-      })}
-      onPointerDown={e => {
-        const target = e.target as HTMLElement;
-        if (e.button === 0 && !target.closest('.pointer-events-auto, button, a') && gameState.gameStarted) {
-            setIsPanning(true);
-            lastMouseClientPos.current = { x: e.clientX, y: e.clientY };
-            (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        }
-      }}
-      onPointerMove={e => {
-        if (!isPanning || !lastMouseClientPos.current) return;
-        const dx = e.clientX - lastMouseClientPos.current.x, dy = e.clientY - lastMouseClientPos.current.y;
-        lastMouseClientPos.current = { x: e.clientX, y: e.clientY };
-        setGameState(p => {
-            let ox = Math.max(-300, Math.min(300, p.viewConfig.cameraOffsetX + dx));
-            let oy = Math.max(-300, Math.min(300, p.viewConfig.cameraOffsetY + dy));
-            return {...p, viewConfig: {...p.viewConfig, cameraOffsetX: ox, cameraOffsetY: oy}};
-        });
-      }}
-      onPointerUp={e => { setIsPanning(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); }}
-      onPointerCancel={e => { setIsPanning(false); (e.target as HTMLElement).releasePointerCapture(e.pointerId); }}
-    >
-      <GameCanvas gameState={gameState} />
+    <div className="relative w-screen h-screen overflow-hidden bg-stone-950">
+      <GameCanvas gameState={gameState} gameStateRef={gameStateRef} mouseTargetRef={mouseTargetPos} />
       
-      {/* Critical Vitals Red Overlay */}
-      <div 
-        className={`fixed inset-0 z-[150] pointer-events-none transition-opacity duration-1000 ${isCritical ? 'opacity-100' : 'opacity-0'}`}
-        style={{
-          background: 'radial-gradient(circle, transparent 40%, rgba(220, 38, 38, 0.4) 100%)'
-        }}
-      >
-        <div className={`absolute inset-0 bg-red-600/10 ${isCritical ? 'animate-vitals-pulse' : ''}`} />
-      </div>
+      {isResting && (
+        <div className="absolute inset-0 z-40 bg-black/40 backdrop-blur-[2px] pointer-events-none flex items-center justify-center">
+          <div className="text-white font-black text-4xl animate-pulse flex flex-col items-center">
+            <span>💤</span>
+            <span className="text-sm mt-2 opacity-50 tracking-[0.3em] uppercase">Resting in tent</span>
+          </div>
+        </div>
+      )}
 
-      {/* Cinematic Resting Overlay */}
-      <div 
-        className={`fixed inset-0 bg-black z-[200] pointer-events-none transition-opacity duration-1000 flex flex-col items-center justify-center ${isResting ? 'opacity-100' : 'opacity-0'}`}
-      >
-         <div className="text-white font-black text-4xl tracking-widest animate-pulse uppercase">Resting...</div>
-         <div className="text-white/20 text-xs mt-4 tracking-[0.5em] uppercase">Time is passing</div>
-      </div>
-
-      <HUD stats={gameState.playerStats} time={gameState.time} message={uiState.message} gameState={gameState} onAction={handleInventoryAction} onZoom={() => {}} onRotate={() => {}} onOpenSettings={() => {}} />
-      {isMobile && <MobileControls onMove={(dx, dy) => { if (activeKeys.current.size === 0) inputDir.current = {x: dx, y: dy}; }} onInteractStart={() => { if (activeKeys.current.size === 0) {isInteracting.current = true; lastInteractTimeInput.current = Date.now();}} } onInteractEnd={() => { if (activeKeys.current.size === 0) isInteracting.current = false; }} />}
-      {!gameState.gameStarted && <MainMenu onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(p => ({...p, gameStarted: true})); }} settings={gameState.settings} onUpdateSettings={s => setGameState(p => ({...p, settings: s}))} playerStats={gameState.playerStats} onUpdatePlayerStats={p => setGameState(g => ({...g, playerStats: p}))} />}
-      <div className="fixed bottom-6 right-6 flex flex-col items-center gap-4 z-50 pointer-events-auto">
-         {isMobile && <button onPointerDown={() => isInteracting.current = true} onPointerUp={() => isInteracting.current = false} className="w-16 h-16 bg-amber-500 rounded-full flex items-center justify-center text-3xl font-black shadow-[0_0_40px_rgba(245,158,11,0.5)] active:scale-90 transition-all">E</button>}
-         <button onClick={() => setUiState(u => ({...u, inventoryOpen: !u.inventoryOpen, craftingOpen: false}))} className="w-12 h-12 bg-white/10 backdrop-blur-xl border border-white/20 rounded-full flex items-center justify-center text-xl shadow-xl">🎒</button>
-         <button onClick={() => setUiState(u => ({...u, craftingOpen: !u.craftingOpen, inventoryOpen: false}))} className="w-12 h-12 bg-white/10 backdrop-blur-xl border border-white/20 rounded-full flex items-center justify-center text-xl shadow-xl">⚒️</button>
-      </div>
-      {uiState.inventoryOpen && <Inventory items={gameState.inventory} equippedItemId={gameState.playerStats.equippedItemId} onAction={handleInventoryAction} onClose={() => setUiState(u => ({...u, inventoryOpen: false}))} language={gameState.settings.language} />}
-      {uiState.craftingOpen && <Crafting inventory={gameState.inventory} playerLevel={gameState.playerStats.level} isNearWorkbench={gameState.entities.some(e => e.type === 'workbench' && Math.sqrt((e.x-gameState.playerPos.x)**2 + (e.y-gameState.playerPos.y)**2) < 2)} onCraft={recipeId => {
-        const recipe = RECIPES.find(r => r.id === recipeId);
-        if (!recipe) return;
-        setGameState(prev => {
-          const newInv = [...prev.inventory];
-          Object.entries(recipe.ingredients).forEach(([id, qty]) => {
-            const idx = newInv.findIndex(i => i.id === id);
-            if (idx > -1) newInv[idx].quantity -= qty;
-          });
-          if (recipe.output.type === 'structure') {
-             const newEntity: Entity = { id: `struct-${Date.now()}`, x: prev.playerPos.x + 1, y: prev.playerPos.y + 1, type: recipe.output.id as EntityType, health: 20, maxHealth: 20 };
-             return { ...prev, entities: [...prev.entities, newEntity], inventory: newInv.filter(i => i.quantity > 0) };
-          }
-          const invIdx = newInv.findIndex(i => i.id === recipe.output.id);
-          if (invIdx > -1) newInv[invIdx].quantity += recipe.output.quantity;
-          else newInv.push({ ...recipe.output });
-          SoundManager.playUI('fanfare');
-          showMessage('CRAFTED!', true);
-          return { ...prev, inventory: newInv.filter(i => i.quantity > 0) };
-        });
-        addXP(20);
-      }} onClose={() => setUiState(u => ({...u, craftingOpen: false}))} language={gameState.settings.language} />}
+      <HUD 
+        stats={gameState.playerStats}
+        time={gameState.time}
+        message={uiState.message}
+        gameState={gameState}
+        onAction={handleHUDAction}
+        onZoom={handleZoom}
+        onRotate={handleRotate}
+        onOpenSettings={() => setUiState(s => ({ ...s, settingsOpen: true, inventoryOpen: false, craftingOpen: false }))}
+      />
       
-      <style>{`
-        @keyframes vitals-pulse {
-          0%, 100% { opacity: 0.2; }
-          50% { opacity: 0.6; }
-        }
-        .animate-vitals-pulse {
-          animation: vitals-pulse 2s ease-in-out infinite;
-        }
-      `}</style>
+      {uiState.inventoryOpen && (
+        <Inventory 
+          items={gameState.inventory}
+          equippedItemId={gameState.playerStats.equippedItemId}
+          onAction={handleHUDAction}
+          onClose={() => setUiState(s => ({...s, inventoryOpen: false}))}
+          language={gameState.settings.language}
+        />
+      )}
+      
+      {uiState.craftingOpen && (
+        <Crafting 
+          inventory={gameState.inventory}
+          playerLevel={gameState.playerStats.level}
+          isNearWorkbench={isNearWorkbench}
+          onCraft={(recipeId) => {
+            const recipe = RECIPES.find(r => r.id === recipeId);
+            if (!recipe) return;
+            
+            setGameState(prev => {
+               const canCraft = Object.entries(recipe.ingredients).every(([id, qty]) => {
+                  const item = prev.inventory.find(i => i.id === id);
+                  return item && item.quantity >= (qty as number);
+               });
+               
+               if (!canCraft) return prev;
+               
+               let ni = [...prev.inventory];
+               Object.entries(recipe.ingredients).forEach(([id, qty]) => {
+                  const idx = ni.findIndex(i => i.id === id);
+                  if (idx > -1) {
+                    ni[idx].quantity -= (qty as number);
+                    if (ni[idx].quantity <= 0) ni.splice(idx, 1);
+                  }
+               });
+               
+               const existingIdx = ni.findIndex(i => i.id === recipe.output.id);
+               if (existingIdx > -1) ni[existingIdx].quantity += recipe.output.quantity;
+               else ni.push({ ...recipe.output });
+               
+               SoundManager.playUI('fanfare');
+               showMessage('Crafted: ' + recipe.name, true);
+               
+               return { ...prev, inventory: ni };
+            });
+          }}
+          onClose={() => setUiState(s => ({...s, craftingOpen: false}))}
+          language={gameState.settings.language}
+        />
+      )}
+      
+      {uiState.settingsOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+           <div className="w-full max-w-md bg-stone-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+              <h2 className="text-3xl font-black mb-8 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2>
+              <div className="space-y-6 text-white">
+                <div className="flex flex-col gap-3">
+                   <span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('language')}</span>
+                   <div className="grid grid-cols-2 gap-3">
+                      {(['en', 'tr'] as Language[]).map(l => (
+                        <button key={l} onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, language: l}}))} className={`py-3.5 rounded-xl font-black text-[11px] uppercase border transition-all ${gameState.settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{l === 'en' ? 'English' : 'Türkçe'}</button>
+                      ))}
+                   </div>
+                </div>
+                <div className="flex flex-col gap-3">
+                   <span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('sound')}</span>
+                   <button onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, soundEnabled: !prev.settings.soundEnabled}}))} className={`py-3.5 rounded-xl font-black text-[11px] uppercase border transition-all ${gameState.settings.soundEnabled ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{gameState.settings.soundEnabled ? 'ON' : 'OFF'}</button>
+                </div>
+              </div>
+              <button onClick={() => setUiState(s => ({...s, settingsOpen: false}))} className="w-full py-4 mt-10 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-[11px] hover:bg-amber-500 transition-colors">{t('back')}</button>
+           </div>
+        </div>
+      )}
+      
+      {isMobile && <MobileControls onMove={(dx, dy) => {
+        velocity.current.x = dx * 10;
+        velocity.current.y = dy * 10;
+        mouseTargetPos.current = null;
+      }} onInteractStart={handleInteract} onInteractEnd={() => {}} />}
     </div>
   );
 };
+
 export default App;

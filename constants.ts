@@ -10,9 +10,9 @@ export const SAVE_KEY = 'embers_edge_save_v5';
 
 export const TRANSLATIONS: Record<Language, any> = {
   en: {
-    new_game: "NEW SURVIVAL",
-    continue: "CONTINUE JOURNEY",
-    settings: "SETTINGS",
+    new_game: "NEW GAME",
+    continue: "CONTINUE",
+    settings: "OPTIONS",
     language: "LANGUAGE",
     sound: "SOUND",
     gender: "GENDER",
@@ -60,12 +60,21 @@ export const TRANSLATIONS: Record<Language, any> = {
     stone_wall: "Stone Wall",
     watchtower: "Watchtower",
     castle_gate: "Castle Gate",
-    hp: "HP"
+    hp: "HP",
+    controls: "CONTROLS",
+    keyboard: "KEYBOARD",
+    mouse: "MOUSE",
+    move: "Move",
+    interact: "Interact",
+    pan: "Pan Camera",
+    zoom: "Zoom",
+    quick_slots: "Quick Slots",
+    exit: "Exit"
   },
   tr: {
-    new_game: "YENİ HAYATTA KALMA",
-    continue: "MACERAYA DEVAM ET",
-    settings: "AYARLAR",
+    new_game: "YENİ OYUN",
+    continue: "DEVAM ET",
+    settings: "SEÇENEKLER",
     language: "DİL",
     sound: "SES",
     gender: "CİNSİYET",
@@ -113,7 +122,16 @@ export const TRANSLATIONS: Record<Language, any> = {
     stone_wall: "Taş Duvar",
     watchtower: "Gözetleme Kulesi",
     castle_gate: "Kale Kapısı",
-    hp: "YP"
+    hp: "YP",
+    controls: "KONTROLLER",
+    keyboard: "KLAVYE",
+    mouse: "FARE",
+    move: "Hareket",
+    interact: "Etkileşim",
+    pan: "Kamerayı Kaydır",
+    zoom: "Zoom",
+    quick_slots: "Hızlı Slotlar",
+    exit: "Çıkış"
   }
 };
 
