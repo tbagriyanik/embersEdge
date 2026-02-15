@@ -36,7 +36,7 @@ export const spawnEntities = (count: number): Entity[] => {
     'tree_oak', 'tree_pine', 'tree_palm', 
     'rock_standard', 'rock_iron', 
     'bush_berry', 'bush_flower', 'bush_dry',
-    'deer', 'rabbit', 'bear', 'scorpion'
+    'deer', 'rabbit', 'bear', 'scorpion', 'crab'
   ];
 
   for (let i = 0; i < count; i++) {
@@ -46,9 +46,9 @@ export const spawnEntities = (count: number): Entity[] => {
     if (tile === 'water') continue;
     let type = types[Math.floor(Math.random() * types.length)];
     if (tile === 'sand') {
-      type = Math.random() > 0.6 ? 'tree_palm' : 'scorpion';
+      type = Math.random() > 0.5 ? 'tree_palm' : (Math.random() > 0.5 ? 'scorpion' : 'crab');
     } else {
-      if (type === 'tree_palm' || type === 'scorpion') type = 'tree_oak';
+      if (type === 'tree_palm' || type === 'scorpion' || type === 'crab') type = 'tree_oak';
     }
     if (type === 'bear' && Math.random() > 0.1) continue;
     entities.push({
@@ -203,7 +203,7 @@ const App: React.FC = () => {
   }, [isResting, showMessage]);
 
   const handleEntityDeath = useCallback((target: Entity, prev: any): any => {
-    const xpGain = ['deer', 'rabbit', 'bear', 'scorpion'].includes(target.type) ? 60 : 30;
+    const xpGain = ['deer', 'rabbit', 'bear', 'scorpion', 'crab'].includes(target.type) ? 60 : 30;
     const updatedEntities = prev.entities.filter((e: Entity) => e.id !== target.id);
     let rewardId = 'berry';
     let qty = 1;
@@ -211,7 +211,10 @@ const App: React.FC = () => {
     else if (target.type.includes('rock')) {
         rewardId = target.type === 'rock_iron' ? 'iron' : 'stone';
     }
-    else if (target.type === 'deer' || target.type === 'bear') { rewardId = 'meat_raw'; qty = target.type === 'bear' ? 3 : 2; }
+    else if (['deer', 'bear', 'scorpion', 'crab'].includes(target.type)) { 
+      rewardId = 'meat_raw'; 
+      qty = target.type === 'bear' ? 3 : (target.type === 'deer' ? 2 : 1); 
+    }
     else if (target.type === 'rabbit') { rewardId = 'meat_raw'; qty = 1; }
     
     const rewardItem = { ...ITEMS[rewardId], quantity: qty };
@@ -269,12 +272,12 @@ const App: React.FC = () => {
         return prev;
       }
 
-      const gatherables = ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'deer', 'rabbit', 'bear', 'scorpion'];
+      const gatherables = ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'deer', 'rabbit', 'bear', 'scorpion', 'crab'];
       if (gatherables.includes(target.type)) {
          let predictedReward = 'berry';
          if (target.type.includes('tree')) predictedReward = 'wood';
          else if (target.type.includes('rock')) predictedReward = target.type === 'rock_iron' ? 'iron' : 'stone';
-         else if (['deer', 'rabbit', 'bear', 'scorpion'].includes(target.type)) predictedReward = 'meat_raw';
+         else if (['deer', 'rabbit', 'bear', 'scorpion', 'crab'].includes(target.type)) predictedReward = 'meat_raw';
          
          if (!canCarryItem(predictedReward, 1, prev.inventory)) {
              showMessage('inv_full');
@@ -340,7 +343,7 @@ const App: React.FC = () => {
 
       const updatedEntities = prev.entities.map(e => {
         if (e.id === target.id) {
-          const isHostile = ['bear', 'scorpion'].includes(e.type);
+          const isHostile = ['bear', 'scorpion', 'crab'].includes(e.type);
           return { ...e, health: newHealth, aiState: isHostile ? 'hunting' : 'fleeing', isFleeing: !isHostile } as Entity;
         }
         return e;
@@ -363,9 +366,9 @@ const App: React.FC = () => {
   const handleInteract = useCallback(() => {
     if (isPaused) return;
     const state = gameStateRef.current;
-    const nearestAnimal = state.entities.find((e: Entity) => ['deer', 'rabbit', 'bear', 'scorpion'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.8);
+    const nearestAnimal = state.entities.find((e: Entity) => ['deer', 'rabbit', 'bear', 'scorpion', 'crab'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.8);
     if (nearestAnimal) { executeInteraction(nearestAnimal.id); return; }
-    const nearestObj = state.entities.find((e: any) => !['deer', 'rabbit', 'bear', 'scorpion', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.6);
+    const nearestObj = state.entities.find((e: any) => !['deer', 'rabbit', 'bear', 'scorpion', 'crab', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - state.playerPos.x)**2 + (e.y - state.playerPos.y)**2) < 1.6);
     if (nearestObj) { executeInteraction(nearestObj.id); return; } 
     let nearWater = false;
     for (let dx = -1.2; dx <= 1.2; dx += 0.4) {
@@ -570,7 +573,7 @@ const App: React.FC = () => {
           } else if (newState === 'idle' && targetX !== undefined && targetY !== undefined) { const tdx = targetX - ent.x; const tdy = targetY - ent.y; const td = Math.sqrt(tdx*tdx + tdy*tdy); if (td > 0.2) { newX += (tdx/td) * 1.5 * dt; newY += (tdy/td) * 1.5 * dt; } }
         }
 
-        if (ent.type === 'bear' || ent.type === 'scorpion') {
+        if (ent.type === 'bear' || ent.type === 'scorpion' || ent.type === 'crab') {
           const huntRange = ent.health < ent.maxHealth ? 14 : 7;
           if (distToPlayer < huntRange) {
             if (distToPlayer < 1.3) {
@@ -581,7 +584,6 @@ const App: React.FC = () => {
                 animalAttackTriggered = true;
               }
             } else {
-              // Fix for line 584: Changed hdy*hmag to hdy*hdy to correctly calculate distance (magnitude)
               newState = 'hunting'; const hdx = prev.playerPos.x - ent.x; const hdy = prev.playerPos.y - ent.y; const hmag = Math.sqrt(hdx*hdx + hdy*hdy); const speed = ent.type === 'bear' ? 3.0 : 2.2; newX += (hdx/hmag) * speed * dt; newY += (hdy/hmag) * speed * dt;
             }
           } else if (targetX === undefined || now - (ent.lastAiTick || 0) > 5000) {
@@ -597,13 +599,13 @@ const App: React.FC = () => {
       nextProjectiles.forEach(p => {
         const hitIdx = nextEntities.findIndex(e => !['road', 'bridge', 'campfire'].includes(e.type) && Math.sqrt((e.x - p.x)**2 + (e.y - p.y)**2) < 0.8);
         if (hitIdx > -1) {
-          const target = nextEntities[hitIdx]; const isHostile = ['bear', 'scorpion'].includes(target.type); target.health -= p.damage; target.aiState = isHostile ? 'hunting' : 'fleeing'; target.isFleeing = !isHostile; p.life = 0; if (target.health <= 0) finalState = handleEntityDeath(target, finalState);
+          const target = nextEntities[hitIdx]; const isHostile = ['bear', 'scorpion', 'crab'].includes(target.type); target.health -= p.damage; target.aiState = isHostile ? 'hunting' : 'fleeing'; target.isFleeing = !isHostile; p.life = 0; if (target.health <= 0) finalState = handleEntityDeath(target, finalState);
         }
       });
 
       const updatedEntities = finalState.entities.filter((e: Entity) => e.type !== 'campfire' || !e.spawnTime || now - e.spawnTime < CAMPFIRE_LIFESPAN);
       const moveX = velocity.current.x * dt; const moveY = velocity.current.y * dt;
-      const checkCollision = (px: number, py: number) => { if (getTileType(px, py) === 'water') return true; return updatedEntities.some((e: Entity) => !['rabbit', 'scorpion', 'deer', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - px)**2 + (e.y - py)**2) < 0.55); };
+      const checkCollision = (px: number, py: number) => { if (getTileType(px, py) === 'water') return true; return updatedEntities.some((e: Entity) => !['rabbit', 'scorpion', 'deer', 'crab', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - px)**2 + (e.y - py)**2) < 0.55); };
       let finalX = prev.playerPos.x; let finalY = prev.playerPos.y;
       if (!checkCollision(finalX + moveX, finalY + moveY)) { finalX += moveX; finalY += moveY; } else { if (!checkCollision(finalX + moveX, finalY)) finalX += moveX; if (!checkCollision(finalX, finalY + moveY)) finalY += moveY; }
       
@@ -697,7 +699,7 @@ const App: React.FC = () => {
              return { ...prev, inventory: ni, entities: updatedEntities, playerStats: { ...prev.playerStats, equippedItemId: newEquippedId } };
           });
       }} onClose={() => setUiState(s => ({...s, craftingOpen: false}))} onSwitchToInventory={() => setUiState(s => ({...s, inventoryOpen: true, craftingOpen: false}))} language={gameState.settings.language} />}
-      {uiState.settingsOpen && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"><div className="w-full max-w-md bg-stone-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl text-white"><h2 className="text-3xl font-black mb-8 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2><div className="flex flex-col gap-4"><button onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, soundEnabled: !prev.settings.soundEnabled}}))} className={`py-3.5 rounded-xl font-black text-[11px] border ${gameState.settings.soundEnabled ? 'bg-amber-500 text-stone-900 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{t('sound')}: {gameState.settings.soundEnabled ? 'ON' : 'OFF'}</button><div className="flex flex-col gap-3 mt-4"><span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('language')}</span><div className="grid grid-cols-2 gap-3">{(['en', 'tr'] as Language[]).map(l => (<button key={l} onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, language: l}}))} className={`py-3.5 rounded-xl font-black text-[11px] uppercase border transition-all ${gameState.settings.language === l ? 'bg-amber-500 text-stone-900 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{l === 'en' ? 'English' : 'Türkçe'}</button>))}</div></div></div><button onClick={() => setUiState(s => ({...s, settingsOpen: false}))} className="w-full py-4 mt-10 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-[11px] hover:bg-amber-500 transition-colors shadow-lg active:scale-95">{t('back')}</button></div></div>}
+      {uiState.settingsOpen && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"><div className="w-full max-w-md bg-stone-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl text-white"><h2 className="text-3xl font-black mb-8 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2><div className="flex flex-col gap-4"><button onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, soundEnabled: !prev.settings.soundEnabled}}))} className={`py-3.5 rounded-xl font-black text-[11px] border ${gameState.settings.soundEnabled ? 'bg-amber-500 text-stone-900 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{t('sound')}: {gameState.settings.soundEnabled ? 'ON' : 'OFF'}</button><div className="flex flex-col gap-3 mt-4"><span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('language')}</span><div className="grid grid-cols-2 gap-3">{(['en', 'tr'] as Language[]).map(l => (<button key={l} onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, language: l}}))} className={`py-3.5 rounded-xl font-black text-[11px] uppercase border transition-all ${gameState.settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{l === 'en' ? 'English' : 'Türkçe'}</button>))}</div></div></div><button onClick={() => setUiState(s => ({...s, settingsOpen: false}))} className="w-full py-4 mt-10 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-[11px] hover:bg-amber-500 transition-colors shadow-lg active:scale-95">{t('back')}</button></div></div>}
     </div>
   );
 };

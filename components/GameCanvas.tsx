@@ -321,8 +321,8 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         if (ent.type === 'player') {
           drawPlayer(ctx, centerX, centerY, zoom, state.playerStats, now);
         } else {
-          const icons: any = { tree_oak: '🌳', tree_pine: '🌲', tree_palm: '🌴', rock_standard: '🪨', rock_iron: '⛓️', bush_berry: '🌿', bush_flower: '🌺', bush_dry: '🌾', deer: '🦌', rabbit: '🐇', bear: '🐻', scorpion: '🦂', campfire: '🔥', tent: '⛺', workbench: '⚒️', hut: '🏠', watchtower: '🏰' };
-          const bounce = ['deer', 'rabbit', 'bear', 'scorpion'].includes(ent.type) ? Math.abs(Math.sin(now / 150)) * 2 * zoom : 0;
+          const icons: any = { tree_oak: '🌳', tree_pine: '🌲', tree_palm: '🌴', rock_standard: '🪨', rock_iron: '⛓️', bush_berry: '🌿', bush_flower: '🌺', bush_dry: '🌾', deer: '🦌', rabbit: '🐇', bear: '🐻', scorpion: '🦂', crab: '🦀', campfire: '🔥', tent: '⛺', workbench: '⚒️', hut: '🏠', watchtower: '🏰' };
+          const bounce = ['deer', 'rabbit', 'bear', 'scorpion', 'crab'].includes(ent.type) ? Math.abs(Math.sin(now / 150)) * 2 * zoom : 0;
           let entityFontSize = 42;
           if (ent.type === 'tent') entityFontSize = 64;
           if (ent.type === 'hut') entityFontSize = 80;

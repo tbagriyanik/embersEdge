@@ -45,7 +45,7 @@ export type EntityType =
   | 'tree_oak' | 'tree_pine' | 'tree_palm' 
   | 'rock_standard' | 'rock_iron' 
   | 'bush_berry' | 'bush_flower' | 'bush_dry'
-  | 'well' | 'player' | 'deer' | 'rabbit' | 'campfire' | 'tent' | 'workbench' | 'hut' | 'scorpion' | 'bear'
+  | 'well' | 'player' | 'deer' | 'rabbit' | 'campfire' | 'tent' | 'workbench' | 'hut' | 'scorpion' | 'bear' | 'crab'
   | 'bridge' | 'road' | 'stone_wall' | 'watchtower' | 'castle_gate';
 
 export interface Entity {
