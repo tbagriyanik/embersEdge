@@ -7,7 +7,10 @@ import { getTileType } from '../App';
 interface Props {
   gameState: GameState & { 
     birds: {x: number, y: number, vx: number, vy: number, flap: number}[],
-    ripples: {x: number, y: number, startTime: number}[] 
+    ripples: {x: number, y: number, startTime: number}[],
+    particles: {id: string, x: number, y: number, vx: number, vy: number, life: number, color: string, size: number}[],
+    shake: number,
+    isRecentlyAttackedByAnimal: boolean
   };
   gameStateRef: React.RefObject<any>;
   mouseTargetRef: React.RefObject<{ x: number, y: number } | null>;
@@ -26,6 +29,16 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     }));
   }, []);
 
+  const weatherParticles = useMemo(() => {
+    return [...Array(100)].map(() => ({
+      x: Math.random(),
+      y: Math.random(),
+      v: 1 + Math.random() * 2,
+      drift: (Math.random() - 0.5) * 0.5,
+      size: 1 + Math.random() * 2
+    }));
+  }, []);
+
   const getTransformedCoords = (wx: number, wy: number, rotation: number) => {
     if (rotation === 90) return { tx: wy, ty: WORLD_SIZE - 1 - wx };
     if (rotation === 180) return { tx: WORLD_SIZE - 1 - wx, ty: WORLD_SIZE - 1 - wy };
@@ -38,6 +51,53 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     const tw = TILE_WIDTH * zoom;
     const th = TILE_HEIGHT * zoom;
     return { x: tx * tw, y: ty * th };
+  };
+
+  const drawWeather = (ctx: CanvasRenderingContext2D, type: string, intensity: number, now: number, width: number, height: number) => {
+    if (intensity <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = intensity;
+    
+    if (type === 'rain') {
+      ctx.strokeStyle = 'rgba(150, 180, 255, 0.4)';
+      ctx.lineWidth = 1;
+      weatherParticles.forEach(p => {
+        const py = ((p.y + (now / 200) * p.v) % 1) * height;
+        const px = ((p.x + (now / 1000) * p.drift) % 1) * width;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + p.drift * 20, py + 20);
+        ctx.stroke();
+      });
+    } else if (type === 'snow') {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      weatherParticles.forEach(p => {
+        const py = ((p.y + (now / 1000) * p.v) % 1) * height;
+        const px = ((p.x + (now / 2000) * Math.sin(now / 500 + p.x * 10)) % 1) * width;
+        ctx.beginPath();
+        ctx.arc(px, py, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    } else if (type === 'fog') {
+      const fogGrad = ctx.createLinearGradient(0, 0, width, height);
+      fogGrad.addColorStop(0, `rgba(200, 200, 210, ${0.4 * intensity})`);
+      fogGrad.addColorStop(0.5, `rgba(180, 180, 190, ${0.2 * intensity})`);
+      fogGrad.addColorStop(1, `rgba(200, 200, 210, ${0.4 * intensity})`);
+      ctx.fillStyle = fogGrad;
+      ctx.fillRect(0, 0, width, height);
+      
+      // Moving fog patches
+      for (let i = 0; i < 5; i++) {
+        const fx = ((i * 0.2 + now / 10000) % 1) * width;
+        const fy = Math.sin(now / 2000 + i) * 50 + height / 2;
+        const grad = ctx.createRadialGradient(fx, fy, 0, fx, fy, 300);
+        grad.addColorStop(0, `rgba(255, 255, 255, ${0.1 * intensity})`);
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, width, height);
+      }
+    }
+    ctx.restore();
   };
 
   const drawPlayer = (ctx: CanvasRenderingContext2D, x: number, y: number, zoom: number, stats: any, now: number) => {
@@ -54,12 +114,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     const timeSinceHit = now - (stats.lastDamageTime || 0);
     const isRecentlyHit = timeSinceHit < 1000;
     
-    // Condition for blood splat visibility
-    const isLowHealth = stats.health < 25;
-    const isExtremeHunger = stats.hunger < 15;
-    const isExtremeThirst = stats.thirst < 15;
-    const showBloodParticles = isRecentlyHit || isLowHealth || isExtremeHunger || isExtremeThirst;
-
     const swing = isWalking ? Math.sin(now / 100) * 0.4 : 0;
     const bob = isWalking ? Math.abs(Math.sin(now / 100)) * 2 * zoom : 0;
 
@@ -67,8 +121,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     ctx.translate(x, y - bob);
     ctx.globalAlpha = 1.0; 
 
-    // Body
-    // Body flashes red ONLY when recently hit by an attack (Sadece saldırı var ise kan efekti mantığı)
     ctx.fillStyle = isRecentlyHit && Math.sin(now / 50) > 0 ? '#b91c1c' : outfitColor;
     if (gender === 'male') {
       ctx.beginPath();
@@ -84,22 +136,6 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
       ctx.fill();
     }
 
-    // Blood splats / particles - Appear for hits, low health, hunger or thirst
-    if (showBloodParticles) {
-      ctx.fillStyle = '#991b1b'; 
-      const splatCount = isRecentlyHit ? 6 : (isLowHealth ? 3 : 2);
-      for(let i=0; i<splatCount; i++) {
-        const seed = i * 13.5;
-        const drift = Math.sin(seed + now / 500) * 4 * zoom;
-        const sx = Math.sin(seed) * 12 * zoom + drift;
-        const sy = Math.cos(seed * 0.7) * 18 * zoom - 12 * zoom + Math.cos(now / 300) * 3 * zoom;
-        ctx.beginPath();
-        ctx.arc(sx, sy, (1 + Math.random() * 2) * zoom, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // Arms
     const drawArm = (side: number, angle: number, hasTool: boolean) => {
       ctx.save();
       ctx.translate(side * 12 * zoom, -16 * zoom);
@@ -171,31 +207,34 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
       const rotation = state.viewConfig.rotation;
       const cameraOffsetX = state.viewConfig.cameraOffsetX;
       const cameraOffsetY = state.viewConfig.cameraOffsetY;
+      const weather = state.weather;
 
-      let bgColor = '#1c1917';
-      if (time < 500 || time > 2000) bgColor = '#020617';
-      else if (time >= 500 && time < 800) bgColor = '#2d1b0d';
-      else if (time >= 1700 && time < 2000) bgColor = '#1e1b4b';
+      const cycle = time / 2400; 
+      let bgColor = '#166534';
+      let overlayAlpha = 0;
+      let overlayColor = '0, 0, 0';
+
+      if (cycle < 0.2 || cycle > 0.85) { bgColor = '#020617'; overlayAlpha = 0.65; overlayColor = '0, 0, 10'; }
+      else if (cycle >= 0.2 && cycle < 0.35) { const p = (cycle - 0.2) / 0.15; bgColor = '#2d1b0d'; overlayAlpha = 0.65 * (1 - p); overlayColor = '251, 146, 60'; }
+      else if (cycle >= 0.35 && cycle < 0.7) { bgColor = '#166534'; overlayAlpha = 0; }
+      else if (cycle >= 0.7 && cycle < 0.85) { const p = (cycle - 0.7) / 0.15; bgColor = '#1e1b4b'; overlayAlpha = 0.65 * p; overlayColor = '107, 33, 168'; }
+
+      // Adjust for weather
+      if (weather.type === 'rain') { overlayAlpha = Math.max(overlayAlpha, 0.3 * weather.intensity); overlayColor = '30, 40, 60'; }
+      if (weather.type === 'fog') { overlayAlpha = Math.max(overlayAlpha, 0.5 * weather.intensity); overlayColor = '150, 150, 160'; }
+      if (weather.type === 'snow') { overlayAlpha = Math.max(overlayAlpha, 0.2 * weather.intensity); overlayColor = '200, 220, 255'; }
 
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       drawSky(ctx, time, now, canvas.width, canvas.height);
 
       const pS = toScreen(state.playerPos.x, state.playerPos.y, zoom, rotation);
+      
       ctx.save();
-      ctx.translate(canvas.width / 2 - (pS.x + (TILE_WIDTH * zoom) / 2) + cameraOffsetX, canvas.height / 2 - (pS.y + (TILE_HEIGHT * zoom) / 2) + cameraOffsetY);
-
-      // Combat Range Circle
-      if (state.playerStats.equippedItemId) {
-        ctx.save();
-        ctx.beginPath();
-        const range = 1.8 * TILE_WIDTH * zoom;
-        ctx.arc(pS.x + (TILE_WIDTH * zoom) / 2, pS.y + (TILE_HEIGHT * zoom) / 2, range, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(245, 158, 11, 0.1)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.restore();
-      }
+      ctx.translate(
+        canvas.width / 2 - (pS.x + (TILE_WIDTH * zoom) / 2) + cameraOffsetX, 
+        canvas.height / 2 - (pS.y + (TILE_HEIGHT * zoom) / 2) + cameraOffsetY
+      );
 
       const renderRange = 25 / zoom;
       const startX = Math.max(0, Math.floor(state.playerPos.x - renderRange));
@@ -210,53 +249,51 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
           let color = '#166534';
           if (tile === 'sand') color = '#ca8a04';
           else if (tile === 'water') color = '#1e3a8a';
+          
+          if (weather.type === 'snow') {
+            color = tile === 'water' ? '#3b82f6' : '#e2e8f0';
+          }
+          
           ctx.fillStyle = color;
           ctx.fillRect(s.x, s.y, TILE_WIDTH * zoom + 0.5, TILE_HEIGHT * zoom + 0.5);
         }
       }
 
-      // Projectiles
+      state.particles.forEach((p: any) => {
+        const s = toScreen(p.x, p.y, zoom, rotation);
+        const centerX = s.x + (TILE_WIDTH * zoom) / 2;
+        const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.min(1, p.life * 1.5);
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, p.size * zoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+      });
+
       state.projectiles.forEach((proj: any) => {
         const s = toScreen(proj.x, proj.y, zoom, rotation);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
-
         if (proj.trail && proj.trail.length > 1) {
           ctx.save();
           const trailPoints = proj.trail.map((pt: any) => {
             const sc = toScreen(pt.x, pt.y, zoom, rotation);
             return { x: sc.x + (TILE_WIDTH * zoom) / 2, y: sc.y + (TILE_HEIGHT * zoom) / 2 };
           });
-
           ctx.beginPath();
           ctx.moveTo(trailPoints[0].x, trailPoints[0].y);
-          for (let i = 1; i < trailPoints.length; i++) {
-            ctx.lineTo(trailPoints[i].x, trailPoints[i].y);
-          }
+          for (let i = 1; i < trailPoints.length; i++) ctx.lineTo(trailPoints[i].x, trailPoints[i].y);
           ctx.lineTo(centerX, centerY);
-
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
           ctx.lineWidth = 1.2 * zoom;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
           ctx.stroke();
-          
-          trailPoints.forEach((pt: any, idx: number) => {
-            const alpha = (idx / trailPoints.length) * 0.3;
-            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-            ctx.beginPath();
-            ctx.arc(pt.x, pt.y, 1 * zoom, 0, Math.PI * 2);
-            ctx.fill();
-          });
-          
           ctx.restore();
         }
-
         const angle = Math.atan2(proj.vy, proj.vx);
         ctx.save();
         ctx.translate(centerX, centerY);
         ctx.rotate(angle);
-        ctx.globalAlpha = 1.0;
         ctx.font = `${24 * zoom}px serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -272,41 +309,35 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
         const s = toScreen(ent.x, ent.y, zoom, rotation);
         const centerX = s.x + (TILE_WIDTH * zoom) / 2;
         const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
-        
         ctx.save();
-        ctx.globalAlpha = 1.0; 
-
         const isBuilding = ['tent', 'hut', 'workbench', 'watchtower', 'castle_gate'].includes(ent.type);
         const isStatic = isBuilding || ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'road', 'bridge', 'stone_wall'].includes(ent.type);
-        
         let shadowW = isStatic ? 8 * zoom : 14 * zoom;
         let shadowH = isStatic ? 4 * zoom : 7 * zoom;
         if (isBuilding) { shadowW *= 1.8; shadowH *= 1.8; }
-
         ctx.fillStyle = 'rgba(0,0,0,0.15)'; 
-        ctx.beginPath(); 
-        ctx.ellipse(centerX, centerY + 18 * zoom, shadowW, shadowH, 0, 0, Math.PI * 2); 
-        ctx.fill();
-
+        ctx.beginPath(); ctx.ellipse(centerX, centerY + 18 * zoom, shadowW, shadowH, 0, 0, Math.PI * 2); ctx.fill();
+        
         if (ent.type === 'player') {
           drawPlayer(ctx, centerX, centerY, zoom, state.playerStats, now);
         } else {
           const icons: any = { tree_oak: '🌳', tree_pine: '🌲', tree_palm: '🌴', rock_standard: '🪨', rock_iron: '⛓️', bush_berry: '🌿', bush_flower: '🌺', bush_dry: '🌾', deer: '🦌', rabbit: '🐇', bear: '🐻', scorpion: '🦂', campfire: '🔥', tent: '⛺', workbench: '⚒️', hut: '🏠', watchtower: '🏰' };
           const bounce = ['deer', 'rabbit', 'bear', 'scorpion'].includes(ent.type) ? Math.abs(Math.sin(now / 150)) * 2 * zoom : 0;
-          
           let entityFontSize = 42;
           if (ent.type === 'tent') entityFontSize = 64;
           if (ent.type === 'hut') entityFontSize = 80;
           if (ent.type === 'watchtower') entityFontSize = 90;
           if (ent.type === 'workbench') entityFontSize = 54;
-
           ctx.save();
           ctx.translate(centerX, centerY + 10 * zoom - bounce);
-          ctx.font = `${entityFontSize * zoom}px serif`; 
-          ctx.textAlign = 'center'; 
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(icons[ent.type] || '❓', 0, 0);
           
+          if (weather.type === 'snow' && !isBuilding && ent.type !== 'campfire') {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'white';
+          }
+          
+          ctx.font = `${entityFontSize * zoom}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillText(icons[ent.type] || '❓', 0, 0);
           if (ent.health < ent.maxHealth) {
              const barW = 32 * zoom; const barH = 5 * zoom;
              ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(-barW/2, 6*zoom, barW, barH);
@@ -318,31 +349,31 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
       });
       ctx.restore();
 
-      const cycle = time / 2400;
-      let overlayAlpha = 0;
-      let overlayColor = '0, 0, 0';
-      if (cycle < 0.2 || cycle > 0.8) overlayAlpha = 0.4;
-      else if (cycle >= 0.2 && cycle < 0.35) { const p = (cycle - 0.2) / 0.15; overlayAlpha = 0.4 * (1 - p); overlayColor = '251, 146, 60'; }
-      else if (cycle >= 0.65 && cycle < 0.8) { const p = (cycle - 0.65) / 0.15; overlayAlpha = 0.4 * p; overlayColor = '107, 33, 168'; }
+      if (overlayAlpha > 0) {
+        ctx.save();
+        const screenCenterX = canvas.width / 2 + cameraOffsetX;
+        const screenCenterY = canvas.height / 2 + cameraOffsetY;
+        const nightGrad = ctx.createRadialGradient(screenCenterX, screenCenterY, 60 * zoom, screenCenterX, screenCenterY, 300 * zoom);
+        nightGrad.addColorStop(0, `rgba(${overlayColor}, 0)`); nightGrad.addColorStop(1, `rgba(${overlayColor}, ${overlayAlpha})`);
+        ctx.fillStyle = nightGrad; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
 
-      // Hit Vignette (Only for recent attacks)
+      drawWeather(ctx, weather.type, weather.intensity, now, canvas.width, canvas.height);
+
       const timeSinceHit = now - (state.playerStats.lastDamageTime || 0);
       if (timeSinceHit < 800) {
         const pulse = 0.5 * (1 - timeSinceHit / 800);
         const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.width/4, canvas.width/2, canvas.height/2, canvas.width);
-        grad.addColorStop(0, 'rgba(0,0,0,0)');
-        grad.addColorStop(1, `rgba(153, 27, 27, ${pulse})`);
-        ctx.fillStyle = grad;
-        ctx.fillRect(0,0, canvas.width, canvas.height);
+        grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, `rgba(153, 27, 27, ${pulse})`);
+        ctx.fillStyle = grad; ctx.fillRect(0,0, canvas.width, canvas.height);
       }
 
-      ctx.fillStyle = `rgba(${overlayColor}, ${overlayAlpha})`;
-      ctx.fillRect(0,0, canvas.width, canvas.height);
       frameId = requestAnimationFrame(render);
     };
     render();
     return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(frameId); };
-  }, [stars]); 
+  }, [stars, weatherParticles]); 
 
   return <canvas ref={canvasRef} className="block w-full h-full" />;
 };

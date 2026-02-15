@@ -4,6 +4,7 @@ import { Item, Recipe, PlayerStats, Language } from './types';
 export const TILE_WIDTH = 64;
 export const TILE_HEIGHT = 64; 
 export const WORLD_SIZE = 100; 
+export const MAX_INVENTORY_SLOTS = 25; // Strict slot limit
 
 export const TIME_SCALE = 0.02777; 
 export const SAVE_KEY = 'embers_edge_save_v5';
@@ -37,8 +38,14 @@ export const TRANSLATIONS: Record<Language, any> = {
     perished: "YOU PERISHED",
     retry: "RETRY",
     weather: "WEATHER",
+    clear: "Clear Skies",
+    rain: "Stormy Rain",
+    fog: "Dense Fog",
+    snow: "Cold Snow",
     unlocked_area: "THE WORLD EXPANDS...",
     full: "FULL",
+    inv_full: "INVENTORY FULL!",
+    slots: "SLOTS",
     tree_oak: "Oak Tree",
     tree_pine: "Pine Tree",
     tree_palm: "Palm Tree",
@@ -90,7 +97,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     active_gear: "ACTIVE GEAR",
     repair: "REPAIR",
     need_resources: "NEED RESOURCES",
-    broken: "BROKEN!"
+    broken: "BROKEN!",
+    danger: "DANGER!"
   },
   tr: {
     new_game: "YENİ OYUN",
@@ -120,8 +128,14 @@ export const TRANSLATIONS: Record<Language, any> = {
     perished: "ÖLDÜN",
     retry: "TEKRAR DENE",
     weather: "HAVA DURUMU",
+    clear: "Açık Hava",
+    rain: "Fırtınalı Yağmur",
+    fog: "Yoğun Sis",
+    snow: "Soğuk Kar",
     unlocked_area: "DÜNYA GENİŞLİYOR...",
     full: "DOLU",
+    inv_full: "ENVANTER DOLU!",
+    slots: "SLOT",
     tree_oak: "Meşe Ağacı",
     tree_pine: "Çam Ağacı",
     tree_palm: "Palmiye",
@@ -173,7 +187,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     active_gear: "AKTİF EKİPMAN",
     repair: "TAMİR ET",
     need_resources: "KAYNAK YETERSİZ",
-    broken: "KIRILDI!"
+    broken: "KIRILDI!",
+    danger: "TEHLİKE!"
   }
 };
 
