@@ -126,7 +126,7 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
 
       <div className="fixed right-4 sm:right-6 top-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-auto">
         <div className="p-3 sm:p-4 bg-black/30 backdrop-blur-2xl border border-white/20 rounded-[2.5rem] flex flex-col gap-3 shadow-2xl max-h-[60vh] overflow-hidden">
-          <span className="text-[9px] sm:text-[12px] font-black text-white/40 uppercase tracking-[0.2em] text-center mb-1">Stock</span>
+          <span className="text-[9px] sm:text-[12px] font-black text-white/40 uppercase tracking-[0.2em] text-center mb-1">{t('stock')}</span>
           <div className="flex flex-col gap-2.5 overflow-y-auto pr-1.5 custom-scrollbar">
             {resources.length > 0 ? resources.map(({item, total, maxStack}) => (
               <div key={item.id} className="relative w-12 h-12 sm:w-14 sm:h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center group hover:bg-white/15 transition-all shadow-lg">
@@ -136,7 +136,7 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
                 </span>
               </div>
             )) : (
-              <div className="w-12 h-12 border border-white/10 border-dashed rounded-full flex items-center justify-center opacity-30 text-[9px] text-center px-1 font-bold text-white uppercase">Empty</div>
+              <div className="w-12 h-12 border border-white/10 border-dashed rounded-full flex items-center justify-center opacity-30 text-[9px] text-center px-1 font-bold text-white uppercase">{t('empty')}</div>
             )}
           </div>
         </div>

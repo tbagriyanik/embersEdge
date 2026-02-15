@@ -106,7 +106,9 @@ export const TRANSLATIONS: Record<Language, any> = {
     need_raw_food: "Need raw food!",
     out_of_arrows: "Out of arrows!",
     workbench_ready: "Workbench ready!",
-    new_day: "A NEW DAY BEGINS..."
+    new_day: "A NEW DAY BEGINS...",
+    stock: "STOCK",
+    empty: "EMPTY"
   },
   tr: {
     new_game: "YENİ OYUN",
@@ -203,7 +205,9 @@ export const TRANSLATIONS: Record<Language, any> = {
     need_raw_food: "Pişirilecek yiyecek yok!",
     out_of_arrows: "Ok kalmadı!",
     workbench_ready: "Tezgah hazır!",
-    new_day: "YENİ BİR GÜN BAŞLIYOR..."
+    new_day: "YENİ BİR GÜN BAŞLIYOR...",
+    stock: "STOK",
+    empty: "BOŞ"
   }
 };
 

@@ -98,6 +98,7 @@ const App: React.FC = () => {
     isRecentlyAttackedByAnimal: boolean,
     isDead: boolean
   }>(() => {
+    // Load settings from storage
     let initialSettings: GameSettings = { language: 'en', soundEnabled: true };
     let initialCharacter = INITIAL_STATS.character;
 
@@ -137,11 +138,20 @@ const App: React.FC = () => {
   const gameStateRef = useRef<any>(gameState);
   useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
 
+  // Check for existing save on mount
   useEffect(() => {
     const saved = localStorage.getItem(SAVE_KEY);
-    if (saved) { try { JSON.parse(saved); setHasSave(true); } catch(e) { setHasSave(false); } }
+    if (saved) {
+      try {
+        JSON.parse(saved);
+        setHasSave(true);
+      } catch(e) {
+        setHasSave(false);
+      }
+    }
   }, []);
 
+  // Periodic Auto-save
   useEffect(() => {
     if (!gameState.gameStarted || gameState.isDead) return;
     const saveInterval = setInterval(() => {
@@ -152,6 +162,7 @@ const App: React.FC = () => {
     return () => clearInterval(saveInterval);
   }, [gameState.gameStarted, gameState.isDead]);
 
+  // Save Settings whenever they change
   useEffect(() => {
     const settingsData = {
       settings: gameState.settings,
@@ -160,12 +171,14 @@ const App: React.FC = () => {
     localStorage.setItem(SETTINGS_SAVE_KEY, JSON.stringify(settingsData));
   }, [gameState.settings, gameState.playerStats.character]);
 
+  // Save on Window Unload or blur
   useEffect(() => {
     const handleBlur = () => {
       if (gameStateRef.current.gameStarted && !gameStateRef.current.isDead) {
         const { birds, ripples, particles, shake, isRecentlyAttackedByAnimal, isDead, ...stateToSave } = gameStateRef.current;
         localStorage.setItem(SAVE_KEY, JSON.stringify({ ...stateToSave, gameStarted: false }));
         setHasSave(true);
+        // Force state sync to main menu
         setGameState(prev => ({ ...prev, gameStarted: false }));
       }
     };
@@ -484,10 +497,8 @@ const App: React.FC = () => {
       if (nearWater) break;
     }
     if (nearWater) { triggerDrink(); return; }
-    // Boşta iken dinlenme uyarısını önlemek için triggerRest() çağrısı kaldırıldı.
   }, [executeInteraction, triggerDrink, isPaused]);
 
-  // Fix: Removed incorrect explicit types and casts in setGameState by using : any or omitting to preserve extended state properties
   const handleHUDAction = useCallback((action: 'use' | 'reorder' | 'equip' | 'repair' | 'repair_all', data: any) => {
     if (action === 'use' || action === 'equip') {
        const item = data as Item;
@@ -689,7 +700,7 @@ const App: React.FC = () => {
       let nextTime = (prev.time + 0.1) % 2400;
       let respawnedEntities: Entity[] = [];
       
-      // Detected Midnight wrap-around
+      // Detected Midnight wrap-around (New Day)
       if (nextTime < prev.time) {
          respawnedEntities = spawnEntities(50);
          showMessage('new_day');
@@ -807,7 +818,7 @@ const App: React.FC = () => {
         return { ...finalState, isDead: true, playerStats: { ...prev.playerStats, health: 0 } };
       }
 
-      return { ...finalState, playerPos: { x: finalX, y: finalY }, entities: updatedEntities, playerStats: { ...finalState.playerStats, health: Math.min(prev.playerStats.maxHealth, nextHealth), lastDamageTime: lastDmgTime, lastCombatDamageTime: lastCombatTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, finalState.playerStats.hunger - hungerDrain), thirst: Math.max(0, finalState.playerStats.thirst - thirstDrain) }, time: nextTime };
+      return { ...finalState, playerPos: { x: finalX, y: finalY }, entities: updatedEntities, playerStats: { ...finalState.playerStats, health: Math.min(prev.playerStats.maxHealth, nextHealth), lastDamageTime: lastDmgTime, lastCombatTime: lastCombatTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, finalState.playerStats.hunger - hungerDrain), thirst: Math.max(0, finalState.playerStats.thirst - thirstDrain) }, time: nextTime };
     });
     requestRef.current = requestAnimationFrame(update);
   }, [isResting, uiState, executeInteraction, triggerDrink, handleEntityDeath, isPaused, canCarryItem, showMessage]);
@@ -889,7 +900,42 @@ const App: React.FC = () => {
   }, [handleInteract, uiState, handleHUDAction, isResting, screenToWorld, showMessage, executeInteraction, isPaused]);
 
   if (!gameState.gameStarted) {
-    return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(1200), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: { ...INITIAL_STATS, character: prev.playerStats.character } })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
+    return <MainMenu 
+      hasActiveSession={hasSave} 
+      onStart={() => { 
+        SoundManager.init(); 
+        SoundManager.startForestAmbience(); 
+        setGameState(prev => ({ 
+          ...prev, 
+          gameStarted: true, 
+          entities: spawnEntities(1200), 
+          inventory: [], 
+          playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, 
+          playerStats: { ...INITIAL_STATS, character: prev.playerStats.character } 
+        })); 
+      }} 
+      onContinue={() => { 
+        const saved = localStorage.getItem(SAVE_KEY); 
+        if (saved) { 
+          try { 
+            const loadedState = JSON.parse(saved); 
+            setGameState({ 
+              ...loadedState, 
+              gameStarted: true, 
+              birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false 
+            }); 
+            SoundManager.init(); 
+            SoundManager.startForestAmbience(); 
+          } catch(e) { 
+            showMessage("Failed to load game save.", true); 
+          } 
+        } 
+      }} 
+      settings={gameState.settings} 
+      onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} 
+      playerStats={gameState.playerStats} 
+      onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} 
+    />;
   }
 
   const isNearWorkbench = !!(gameState.entities as Entity[]).find((e: Entity) => e.type === 'workbench' && Math.sqrt((e.x - gameState.playerPos.x)**2 + (e.y - gameState.playerPos.y)**2) < 2.5);
