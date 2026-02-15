@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Item, Language } from '../types';
 import { TRANSLATIONS, MAX_INVENTORY_SLOTS } from '../constants';
 
@@ -22,7 +22,6 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
   const equipRef = useRef<HTMLDivElement>(null);
   const t = (key: string) => TRANSLATIONS[language][key] || key;
 
-  // Semantic categories
   const equipment = items.filter(i => i.type === 'tool' || i.type === 'weapon');
   const consumables = items.filter(i => i.type === 'food');
   const materials = items.filter(i => i.type !== 'tool' && i.type !== 'weapon' && i.type !== 'food');
@@ -41,7 +40,6 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
     if (equipRef.current) {
       const rect = equipRef.current.getBoundingClientRect();
       const dragItem = items[draggedIndex];
-      // STRICT FILTER: Only allow tools/weapons in active slot
       const canEquip = dragItem.type === 'tool' || dragItem.type === 'weapon';
       setIsOverEquip(canEquip && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom);
     }
@@ -131,7 +129,6 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
         </div>
 
         <div className="flex flex-col sm:flex-row p-6 gap-8 overflow-hidden">
-          {/* Active Gear slot - STRICTLY Tools/Weapons */}
           <div className="sm:w-1/3 flex flex-col gap-4">
             <span className="text-[11px] font-black uppercase tracking-widest text-white/40 text-center">Active Gear</span>
             <div 
@@ -148,7 +145,6 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
                )}
             </div>
             
-            {/* Repair All UI */}
             {isNearWorkbench && (
               <div className="p-4 bg-white/5 border border-amber-500/20 rounded-2xl flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
                 <span className="text-[10px] font-black text-amber-500/80 uppercase tracking-widest text-center">Repair Workbench</span>
@@ -173,7 +169,6 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
 
           <div className="w-px bg-white/5 hidden sm:block" />
 
-          {/* Categorized Lists */}
           <div className="flex-1 overflow-y-auto max-h-[60vh] pr-4 custom-scrollbar">
              <InventoryGrid itemsToDraw={equipment} title="Equipment & Tools" icon="⚔️" />
              <InventoryGrid itemsToDraw={consumables} title="Consumables" icon="🫐" />
@@ -215,4 +210,13 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
       )}
 
       {draggedIndex !== null && (
-        <div className="fixed pointer-events-none z-[200] w-20 h-20 bg-amber-500/40 border-2 border-amber-500/50 rounded-2xl flex items-center justify-center text-5xl shadow-[0_10px_40px_rgba(245,158,11,0.2)] backdrop-blur-sm" style={{ left: dragPos.x - 4
+        <div 
+          className="fixed pointer-events-none z-[200] w-20 h-20 bg-amber-500/40 border-2 border-amber-500/50 rounded-2xl flex items-center justify-center text-5xl shadow-[0_10px_40px_rgba(245,158,11,0.2)] backdrop-blur-sm" 
+          style={{ left: dragPos.x - 40, top: dragPos.y - 40 }}
+        >
+          {items[draggedIndex].icon}
+        </div>
+      )}
+    </div>
+  );
+};

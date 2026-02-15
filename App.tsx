@@ -164,14 +164,10 @@ const App: React.FC = () => {
   const canCarryItem = useCallback((itemId: string, quantity: number, currentInventory: Item[]): boolean => {
     const itemTemplate = ITEMS[itemId];
     if (!itemTemplate) return true;
-
-    // Check if it can stack
     if (itemTemplate.stackable) {
       const existingStack = currentInventory.find(i => i.id === itemId && i.quantity < (i.maxStack || 99));
       if (existingStack) return true;
     }
-
-    // If no stack space, check if there is an empty slot
     return currentInventory.length < MAX_INVENTORY_SLOTS;
   }, []);
 
@@ -221,7 +217,6 @@ const App: React.FC = () => {
     const rewardItem = { ...ITEMS[rewardId], quantity: qty };
     const newInv = [...prev.inventory];
     
-    // Safety check in case they bypass interact check somehow (e.g. projectiles)
     if (!canCarryItem(rewardId, qty, newInv)) {
        showMessage('inv_full');
        return { ...prev, entities: updatedEntities };
@@ -274,7 +269,6 @@ const App: React.FC = () => {
         return prev;
       }
 
-      // INVENTORY CAPACITY CHECK
       const gatherables = ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'deer', 'rabbit', 'bear', 'scorpion'];
       if (gatherables.includes(target.type)) {
          let predictedReward = 'berry';
@@ -410,8 +404,62 @@ const App: React.FC = () => {
           ni.splice(fromIdx, 1); ni.splice(toIdx, 0, it);
           return { ...prev, inventory: ni };
        });
+    } else if (action === 'repair') {
+      const itemToRepair = data as Item;
+      setGameState(prev => {
+        const ni = [...prev.inventory];
+        const woodIdx = ni.findIndex(i => i.id === 'wood');
+        const stoneIdx = ni.findIndex(i => i.id === 'stone');
+        if (woodIdx > -1 && ni[woodIdx].quantity >= 2 && stoneIdx > -1 && ni[stoneIdx].quantity >= 2) {
+          const itemIdx = ni.findIndex(i => i.id === itemToRepair.id);
+          if (itemIdx > -1) {
+            const item = { ...ni[itemIdx] };
+            item.durability = item.maxDurability;
+            ni[itemIdx] = item;
+            ni[woodIdx].quantity -= 2;
+            ni[stoneIdx].quantity -= 2;
+            const filteredNi = ni.filter(i => i.quantity > 0);
+            showMessage('Repaired!', true);
+            SoundManager.playUI('fanfare');
+            return { ...prev, inventory: filteredNi };
+          }
+        } else {
+          showMessage('need_resources');
+        }
+        return prev;
+      });
+    } else if (action === 'repair_all') {
+      setGameState(prev => {
+        const ni = [...prev.inventory];
+        const woodIdx = ni.findIndex(i => i.id === 'wood');
+        const stoneIdx = ni.findIndex(i => i.id === 'stone');
+        const damagedItems = ni.filter(item => (item.type === 'tool' || item.type === 'weapon') && (item.durability || 0) < (item.maxDurability || 0));
+        
+        if (damagedItems.length === 0) {
+          showMessage('Nothing to repair.', true);
+          return prev;
+        }
+
+        if (woodIdx > -1 && ni[woodIdx].quantity >= 5 && stoneIdx > -1 && ni[stoneIdx].quantity >= 5) {
+          const finalInv = ni.map(item => {
+            if (item.type === 'tool' || item.type === 'weapon') {
+              return { ...item, durability: item.maxDurability };
+            }
+            if (item.id === 'wood') return { ...item, quantity: item.quantity - 5 };
+            if (item.id === 'stone') return { ...item, quantity: item.quantity - 5 };
+            return item;
+          }).filter(i => i.quantity > 0);
+
+          showMessage('All Tools Repaired!', true);
+          SoundManager.playUI('fanfare');
+          return { ...prev, inventory: finalInv };
+        } else {
+          showMessage('need_resources');
+          return prev;
+        }
+      });
     }
-  }, []);
+  }, [showMessage]);
 
   const screenToWorld = useCallback((sx: number, sy: number) => {
     const state = gameStateRef.current;
@@ -434,7 +482,6 @@ const App: React.FC = () => {
     if (!gameStateRef.current.gameStarted) { requestRef.current = requestAnimationFrame(update); return; }
     if (isPaused) { requestRef.current = requestAnimationFrame(update); return; }
     
-    // Weather logic
     if (time > nextWeatherTime.current) {
       const weathers: WeatherType[] = ['clear', 'rain', 'fog', 'snow'];
       targetWeather.current = weathers[Math.floor(Math.random() * weathers.length)];
@@ -459,7 +506,6 @@ const App: React.FC = () => {
       }
     }
 
-    // Gameplay modifiers
     let speedMod = 1.0;
     let staminaDrainMod = 1.0;
     let thirstDrainMod = 1.0;
@@ -488,7 +534,6 @@ const App: React.FC = () => {
       const now = Date.now();
       const isCurrentlyResting = isRestingRef.current;
       
-      // Update Weather Transition
       let nextWeather = { ...prev.weather };
       if (nextWeather.type !== targetWeather.current) {
         nextWeather.intensity = Math.max(0, nextWeather.intensity - dt * 0.2);
@@ -638,14 +683,11 @@ const App: React.FC = () => {
           setGameState((prev: any) => {
              const canCraft = Object.entries(recipe.ingredients).every(([id, qty]) => { const item = prev.inventory.find((i: Item) => i.id === id); return item && item.quantity >= (qty as number); });
              if (!canCraft) return prev;
-             
-             // Extra safety: Check output fitting
              const outputId = recipe.output.id;
              if (!canCarryItem(outputId, recipe.output.quantity, prev.inventory)) {
                  showMessage('inv_full');
                  return prev;
              }
-
              let ni = [...prev.inventory]; Object.entries(recipe.ingredients).forEach(([id, qty]) => { const idx = ni.findIndex(i => i.id === id); if (idx > -1) { ni[idx].quantity -= (qty as number); if (ni[idx].quantity <= 0) ni.splice(idx, 1); } });
              const newItem = { ...recipe.output }; let updatedEntities = [...prev.entities]; let placedDirectly = false;
              if (newItem.type === 'structure') { const spot = findPlacementSpot(prev.playerPos.x, prev.playerPos.y, updatedEntities); if (spot) { updatedEntities.push({ id: `struct-${Date.now()}`, x: spot.x, y: spot.y, type: newItem.id as EntityType, health: 10, maxHealth: 10, spawnTime: Date.now() }); placedDirectly = true; showMessage(t('placed') + ': ' + recipe.name, true); SoundManager.playUI('fanfare'); } }
