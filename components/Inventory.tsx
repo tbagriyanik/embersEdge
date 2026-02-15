@@ -39,12 +39,12 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
   };
 
   const InventoryGrid = ({ itemsToDraw, title, icon }: { itemsToDraw: Item[], title: string, icon: string }) => (
-    <div className="flex flex-col gap-2 mb-4">
-      <div className="flex items-center justify-between px-1 border-b border-white/5 pb-1">
-        <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-white/40">{icon} {title}</span>
-        <span className="text-[9px] font-mono text-white/20">{itemsToDraw.length}</span>
+    <div className="flex flex-col gap-3 mb-6">
+      <div className="flex items-center justify-between px-2 border-b border-white/10 pb-2">
+        <span className="text-[10px] sm:text-[12px] font-black uppercase tracking-widest text-white/50">{icon} {title}</span>
+        <span className="text-[10px] sm:text-[12px] font-mono text-white/30">{itemsToDraw.length}</span>
       </div>
-      <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 sm:gap-2">
+      <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 sm:gap-3">
         {itemsToDraw.map((item) => {
            const globalIdx = items.findIndex(i => i === item);
            return (
@@ -60,25 +60,29 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
                 onPointerEnter={() => !draggedIndex && setHoveredItem(item)}
                 onPointerLeave={() => setHoveredItem(null)}
                 onClick={() => onAction('use', item)}
-                className={`relative aspect-square rounded-lg sm:rounded-xl border flex items-center justify-center text-2xl sm:text-3xl transition-all ${equippedItemId === item.id ? 'border-amber-400 bg-amber-500/30' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}
+                className={`relative aspect-square rounded-xl border-2 flex items-center justify-center text-3xl sm:text-4xl transition-all cursor-pointer ${equippedItemId === item.id ? 'border-amber-400 bg-amber-500/40' : 'border-white/10 bg-white/5 hover:bg-white/15'}`}
               >
                 {item.icon}
-                {item.quantity > 1 && <span className="absolute bottom-0.5 right-1 text-[10px] font-black text-white/80">{item.quantity}</span>}
+                {item.quantity > 1 && (
+                  <span className="absolute bottom-1 right-1 text-[9px] sm:text-[12px] font-black text-white bg-black/50 px-1 rounded shadow-sm">
+                    {item.quantity}
+                  </span>
+                )}
                 {item.durability !== undefined && (
-                  <div className="absolute bottom-1 left-1.5 right-1.5 h-0.5 sm:h-1 bg-black/40 rounded-full overflow-hidden">
+                  <div className="absolute bottom-1.5 left-2 right-2 h-1 bg-black/40 rounded-full overflow-hidden border border-white/5">
                     <div className="h-full bg-emerald-400" style={{ width: `${(item.durability / (item.maxDurability || 1)) * 100}%` }} />
                   </div>
                 )}
               </div>
            );
         })}
-        {itemsToDraw.length === 0 && <div className="aspect-square rounded-lg border border-dashed border-white/10 flex items-center justify-center opacity-10 text-xl">🕳️</div>}
+        {itemsToDraw.length === 0 && <div className="aspect-square rounded-xl border-2 border-dashed border-white/5 flex items-center justify-center opacity-10 text-2xl">🕳️</div>}
       </div>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm select-none" 
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md select-none" 
          onPointerMove={handlePointerMove} 
          onPointerUp={(e) => {
             if (draggedIndex === null) return;
@@ -94,38 +98,40 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
             setDraggedIndex(null);
             setIsOverEquip(false);
          }}>
-      <div className="w-full max-w-4xl max-h-[90vh] bg-white/10 backdrop-blur-2xl border border-white/20 rounded-[1.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-        <div className="p-4 sm:p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+      <div className="w-full max-w-5xl max-h-[90vh] bg-stone-900/40 backdrop-blur-3xl border border-white/20 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="p-6 sm:p-8 border-b border-white/10 flex justify-between items-center bg-white/5">
           <div className="flex flex-col">
-            <h2 className="text-xl sm:text-2xl font-black text-amber-400 uppercase tracking-tighter flex items-center gap-2 sm:gap-3">
-               <span className="text-2xl sm:text-3xl">🎒</span> {t('inventory')}
+            <h2 className="text-2xl sm:text-3xl font-black text-amber-500 uppercase tracking-tighter flex items-center gap-3">
+               <span className="text-3xl">🎒</span> {t('inventory')}
             </h2>
-            <span className="text-[9px] font-black uppercase tracking-widest text-white/30 mt-0.5">
+            <span className="text-[10px] sm:text-[12px] font-black uppercase tracking-widest text-white/30 mt-1">
               {items.length} / {MAX_INVENTORY_SLOTS} {t('slots')}
             </span>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <button onClick={onSwitchToCrafting} className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-amber-500 text-stone-900 font-black text-[10px] sm:text-[11px] uppercase tracking-widest hover:scale-105 transition-transform">⚒️ {t('crafting')}</button>
-            <button onClick={onClose} className="w-8 h-8 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white/50 text-lg">✕</button>
+          <div className="flex items-center gap-4">
+            <button onClick={onSwitchToCrafting} className="px-6 py-3 rounded-2xl bg-amber-500 text-stone-950 font-black text-[10px] sm:text-[12px] uppercase tracking-widest hover:scale-105 transition-all shadow-lg active:scale-95">⚒️ {t('crafting')}</button>
+            <button onClick={onClose} className="w-12 h-12 rounded-full hover:bg-white/10 flex items-center justify-center text-white/40 text-2xl transition-colors">✕</button>
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row p-4 sm:p-6 gap-4 sm:gap-8 overflow-hidden">
-          <div className="md:w-1/3 flex flex-row md:flex-col gap-4 items-center md:items-stretch">
+        <div className="flex flex-col md:flex-row p-6 sm:p-8 gap-8 sm:gap-12 overflow-hidden">
+          {/* Portrait/Equip Area */}
+          <div className="md:w-1/3 flex flex-row md:flex-col gap-6 items-center md:items-stretch">
             <div 
               ref={equipRef} 
-              className={`w-24 h-24 md:w-full md:aspect-square relative rounded-2xl md:rounded-3xl border-2 flex items-center justify-center text-5xl md:text-7xl transition-all ${isOverEquip ? 'bg-amber-400/20 border-amber-400' : 'bg-black/20 border-white/10'}`}
+              className={`w-32 h-32 md:w-full md:aspect-square relative rounded-3xl border-4 flex items-center justify-center text-6xl md:text-8xl transition-all shadow-inner ${isOverEquip ? 'bg-amber-400/20 border-amber-400' : 'bg-black/30 border-white/10'}`}
             >
                {items.find(i => i.id === equippedItemId)?.icon || <span className="opacity-10">⚔️</span>}
+               <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
             </div>
             
-            <div className="flex-1 flex flex-col gap-2">
-              <span className="text-[9px] font-black uppercase tracking-widest text-white/40 md:text-center">Active Gear</span>
+            <div className="flex-1 flex flex-col gap-4">
+              <span className="text-[10px] sm:text-[12px] font-black uppercase tracking-widest text-white/30 md:text-center">Active Gear</span>
               {isNearWorkbench ? (
-                <button onClick={() => onAction('repair_all', null)} className="w-full py-2 sm:py-3 rounded-lg sm:rounded-xl font-black text-[9px] sm:text-[10px] uppercase bg-emerald-500/80 text-white shadow-lg">🛠️ Repair All</button>
+                <button onClick={() => onAction('repair_all', null)} className="w-full py-4 rounded-2xl font-black text-[10px] sm:text-[12px] uppercase bg-emerald-500 text-white shadow-xl hover:bg-emerald-400 transition-all active:scale-95">🛠️ Repair All</button>
               ) : (
-                <div className="p-3 bg-black/20 rounded-xl border border-white/5 hidden md:block">
-                  <p className="text-[9px] text-white/30 text-center uppercase font-black tracking-widest">Equip tools and weapons here.</p>
+                <div className="p-4 bg-black/20 rounded-2xl border border-white/5 hidden md:block">
+                  <p className="text-[10px] sm:text-[12px] text-white/20 text-center uppercase font-black tracking-widest leading-relaxed">Equip tools and weapons by dragging them here.</p>
                 </div>
               )}
             </div>
@@ -133,7 +139,8 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
 
           <div className="w-full md:w-px bg-white/10 hidden md:block" />
 
-          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+          {/* Grid Area */}
+          <div className="flex-1 overflow-y-auto pr-3 custom-scrollbar">
              <InventoryGrid itemsToDraw={equipment} title="Equipment" icon="⚔️" />
              <InventoryGrid itemsToDraw={consumables} title="Consumables" icon="🫐" />
              <InventoryGrid itemsToDraw={materials} title="Materials" icon="🪵" />
@@ -141,12 +148,15 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
         </div>
       </div>
 
-      {/* Tooltip & Drag Proxy (Simplified for brevity) */}
+      {/* Tooltip */}
       {hoveredItem && !draggedIndex && (
-        <div className="fixed pointer-events-none z-[300] bg-stone-900/90 backdrop-blur-xl border border-white/20 p-4 rounded-xl shadow-2xl flex flex-col gap-2 max-w-[200px]"
-             style={{ left: mousePos.x + 20, top: mousePos.y + 20 }}>
-          <span className="text-amber-400 font-black text-xs uppercase">{hoveredItem.name}</span>
-          <p className="text-[10px] text-white/60 leading-tight">{hoveredItem.description}</p>
+        <div className="fixed pointer-events-none z-[300] bg-stone-900/95 backdrop-blur-3xl border border-white/30 p-5 rounded-2xl shadow-2xl flex flex-col gap-3 max-w-[240px] animate-in fade-in zoom-in-95 duration-200"
+             style={{ left: mousePos.x + 24, top: mousePos.y + 24 }}>
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">{hoveredItem.icon}</span>
+            <span className="text-amber-500 font-black text-[12px] sm:text-[14px] uppercase tracking-tight">{hoveredItem.name}</span>
+          </div>
+          <p className="text-[10px] sm:text-[12px] text-white/70 leading-relaxed font-medium">{hoveredItem.description}</p>
         </div>
       )}
     </div>

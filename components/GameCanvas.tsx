@@ -111,8 +111,8 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     const lastInteract = stats.lastInteractTime || 0;
     const isInteracting = (now - lastInteract) < 400;
 
-    const timeSinceHit = now - (stats.lastDamageTime || 0);
-    const isRecentlyHit = timeSinceHit < 1000;
+    const timeSinceCombatHit = now - (stats.lastCombatDamageTime || 0);
+    const isRecentlyCombatHit = timeSinceCombatHit < 800; // Physical combat flash only
     
     const swing = isWalking ? Math.sin(now / 100) * 0.4 : 0;
     const bob = isWalking ? Math.abs(Math.sin(now / 100)) * 2 * zoom : 0;
@@ -121,7 +121,10 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
     ctx.translate(x, y - bob);
     ctx.globalAlpha = 1.0; 
 
-    ctx.fillStyle = isRecentlyHit && Math.sin(now / 50) > 0 ? '#b91c1c' : outfitColor;
+    // ONLY flash red if attacked by a combat entity
+    const currentBodyColor = isRecentlyCombatHit && Math.sin(now / 50) > 0 ? '#b91c1c' : outfitColor;
+    
+    ctx.fillStyle = currentBodyColor;
     if (gender === 'male') {
       ctx.beginPath();
       ctx.roundRect(-12 * zoom, -20 * zoom, 24 * zoom, 28 * zoom, 4 * zoom);
@@ -142,7 +145,7 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
       const interactProgress = isInteracting && hasTool ? Math.min(1, (now - lastInteract) / 400) : 0;
       const interactSwing = interactProgress > 0 ? Math.sin(interactProgress * Math.PI) * 1.8 : 0;
       ctx.rotate(angle + interactSwing);
-      ctx.fillStyle = isRecentlyHit && Math.sin(now / 50) > 0 ? '#b91c1c' : outfitColor;
+      ctx.fillStyle = currentBodyColor;
       ctx.fillRect(-3 * zoom, 0, 6 * zoom, 16 * zoom);
       ctx.fillStyle = skinColor;
       ctx.beginPath(); ctx.arc(0, 16 * zoom, 4 * zoom, 0, Math.PI * 2); ctx.fill();
@@ -361,9 +364,9 @@ export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) =>
 
       drawWeather(ctx, weather.type, weather.intensity, now, canvas.width, canvas.height);
 
-      const timeSinceHit = now - (state.playerStats.lastDamageTime || 0);
-      if (timeSinceHit < 800) {
-        const pulse = 0.5 * (1 - timeSinceHit / 800);
+      const timeSinceCombatHit = now - (state.playerStats.lastCombatDamageTime || 0);
+      if (timeSinceCombatHit < 500) {
+        const pulse = 0.5 * (1 - timeSinceCombatHit / 500);
         const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.width/4, canvas.width/2, canvas.height/2, canvas.width);
         grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, `rgba(153, 27, 27, ${pulse})`);
         ctx.fillStyle = grad; ctx.fillRect(0,0, canvas.width, canvas.height);

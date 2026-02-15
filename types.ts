@@ -98,7 +98,8 @@ export interface PlayerStats {
   character: CharacterConfig;
   isWalking: boolean;
   lastInteractTime: number;
-  lastDamageTime: number; // New: To handle invincibility frames
+  lastDamageTime: number;
+  lastCombatDamageTime: number; // New: Tracks only physical attack hits
 }
 
 export interface GameSettings {

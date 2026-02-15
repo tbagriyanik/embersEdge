@@ -43,50 +43,42 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
       </div>
 
       {/* Control Summary Table */}
-      <div className="absolute bottom-8 right-8 z-30 hidden lg:flex flex-col gap-5 p-7 bg-stone-900/60 backdrop-blur-3xl border border-white/5 rounded-[2rem] animate-in fade-in slide-in-from-right-8 duration-1000 delay-500 shadow-2xl max-w-sm">
-         <h3 className="text-[12px] font-black tracking-[0.2em] text-amber-500 uppercase mb-2 border-b border-white/5 pb-2">{t('controls')}</h3>
+      <div className="absolute bottom-8 right-8 z-30 hidden lg:flex flex-col gap-6 p-8 bg-black/40 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] animate-in fade-in slide-in-from-right-8 duration-1000 delay-500 shadow-2xl max-w-sm">
+         <h3 className="text-[14px] font-black tracking-[0.3em] text-amber-500 uppercase mb-2 border-b border-white/10 pb-3">{t('controls')}</h3>
          
-         <div className="space-y-4">
+         <div className="space-y-5">
             <div>
-              <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.1em] block mb-2">{t('keyboard')}</span>
-              <div className="grid grid-cols-2 gap-y-2.5">
-                <div className="flex items-center gap-3">
-                   <kbd className="px-2 py-1 bg-white/10 rounded-md text-[10px] font-black border border-white/10 min-w-[36px] text-center">WASD</kbd>
-                   <span className="text-[10px] font-bold text-white/50 uppercase tracking-tight">{t('move')}</span>
+              <span className="text-[12px] font-black text-white/40 uppercase tracking-[0.1em] block mb-3">{t('keyboard')}</span>
+              <div className="grid grid-cols-2 gap-y-3">
+                <div className="flex items-center gap-4">
+                   <kbd className="px-3 py-1.5 bg-white/10 rounded-lg text-[12px] font-black border border-white/10 min-w-[44px] text-center shadow-md">WASD</kbd>
+                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('move')}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                   <kbd className="px-2 py-1 bg-white/10 rounded-md text-[10px] font-black border border-white/10 min-w-[36px] text-center">E</kbd>
-                   <span className="text-[10px] font-bold text-white/50 uppercase tracking-tight">{t('interact')}</span>
+                <div className="flex items-center gap-4">
+                   <kbd className="px-3 py-1.5 bg-white/10 rounded-lg text-[12px] font-black border border-white/10 min-w-[44px] text-center shadow-md">E</kbd>
+                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('interact')}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                   <kbd className="px-2 py-1 bg-white/10 rounded-md text-[10px] font-black border border-white/10 min-w-[36px] text-center">F</kbd>
-                   <span className="text-[10px] font-bold text-white/50 uppercase tracking-tight">{t('inventory')}</span>
+                <div className="flex items-center gap-4">
+                   <kbd className="px-3 py-1.5 bg-white/10 rounded-lg text-[12px] font-black border border-white/10 min-w-[44px] text-center shadow-md">F</kbd>
+                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('inventory')}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                   <kbd className="px-2 py-1 bg-white/10 rounded-md text-[10px] font-black border border-white/10 min-w-[36px] text-center">C</kbd>
-                   <span className="text-[10px] font-bold text-white/50 uppercase tracking-tight">{t('crafting')}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                   <kbd className="px-2 py-1 bg-white/10 rounded-md text-[10px] font-black border border-white/10 min-w-[36px] text-center">ESC</kbd>
-                   <span className="text-[10px] font-bold text-white/50 uppercase tracking-tight">{t('exit')}</span>
+                <div className="flex items-center gap-4">
+                   <kbd className="px-3 py-1.5 bg-white/10 rounded-lg text-[12px] font-black border border-white/10 min-w-[44px] text-center shadow-md">C</kbd>
+                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('crafting')}</span>
                 </div>
               </div>
             </div>
 
             <div>
-              <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.1em] block mb-2">{t('mouse')}</span>
-              <div className="grid grid-cols-2 gap-y-2.5">
-                <div className="flex items-center gap-3">
-                   <div className="w-9 h-5 bg-white/10 rounded-md border border-white/10 flex items-center justify-center"><div className="w-1.5 h-2.5 bg-amber-500 rounded-full mr-3" /></div>
-                   <span className="text-[10px] font-bold text-white/50 uppercase tracking-tight">{t('move')}</span>
+              <span className="text-[12px] font-black text-white/40 uppercase tracking-[0.1em] block mb-3">{t('mouse')}</span>
+              <div className="grid grid-cols-2 gap-y-3">
+                <div className="flex items-center gap-4">
+                   <div className="w-10 h-6 bg-white/10 rounded-lg border border-white/10 flex items-center justify-center"><div className="w-2 h-3 bg-amber-500 rounded-full mr-4" /></div>
+                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('move')}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                   <div className="w-9 h-5 bg-white/10 rounded-md border border-white/10 flex items-center justify-center"><div className="w-1.5 h-2.5 bg-blue-400 rounded-full ml-3" /></div>
-                   <span className="text-[10px] font-bold text-white/50 uppercase tracking-tight">{t('pan')}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                   <div className="w-9 h-5 bg-white/10 rounded-md border border-white/10 flex flex-col items-center justify-center gap-0.5"><div className="w-2 h-1 bg-white/30 rounded-full" /><div className="w-2 h-1 bg-white/30 rounded-full" /></div>
-                   <span className="text-[10px] font-bold text-white/50 uppercase tracking-tight">{t('zoom')}</span>
+                <div className="flex items-center gap-4">
+                   <div className="w-10 h-6 bg-white/10 rounded-lg border border-white/10 flex items-center justify-center"><div className="w-2 h-3 bg-blue-400 rounded-full ml-4" /></div>
+                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('pan')}</span>
                 </div>
               </div>
             </div>
@@ -97,18 +89,18 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
         {!showSettings ? (
           <>
             <div className="flex flex-col items-center text-center">
-              <span className="text-amber-500 font-black tracking-[0.5em] text-[12px] mb-3 opacity-60 animate-in slide-in-from-top-4 duration-700 uppercase">Survive the Wilderness</span>
-              <h1 className="text-6xl sm:text-8xl font-black tracking-tighter text-white drop-shadow-[0_0_40px_rgba(245,158,11,0.2)] animate-in zoom-in-95 duration-1000">
+              <span className="text-amber-500 font-black tracking-[0.6em] text-[14px] mb-4 opacity-70 animate-in slide-in-from-top-6 duration-700 uppercase drop-shadow-lg">Survive the Wilderness</span>
+              <h1 className="text-7xl sm:text-9xl font-black tracking-tighter text-white drop-shadow-[0_0_60px_rgba(245,158,11,0.3)] animate-in zoom-in-95 duration-1000">
                 EMBER'S <span className="text-amber-500 text-glow">EDGE</span>
               </h1>
             </div>
 
-            <div className="flex flex-col gap-3.5 w-full px-8 animate-in slide-in-from-bottom-8 duration-700 delay-300">
+            <div className="flex flex-col gap-4 w-full px-8 animate-in slide-in-from-bottom-12 duration-700 delay-300">
               {hasActiveSession && onContinue && (
                 <button 
                   onClick={() => { SoundManager.playUI('click'); onContinue(); }}
                   onMouseEnter={() => SoundManager.playUI('hover')}
-                  className="group relative overflow-hidden py-5 bg-amber-600 rounded-2xl font-black text-white text-xl tracking-tighter uppercase transition-all hover:scale-105 active:scale-95 shadow-xl border border-white/10"
+                  className="group relative overflow-hidden py-6 bg-amber-600 rounded-2xl font-black text-white text-2xl tracking-tighter uppercase transition-all hover:scale-105 active:scale-95 shadow-2xl border border-white/20"
                 >
                   <div className="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-500 ease-out" />
                   <span className="relative z-10">{t('continue')}</span>
@@ -118,7 +110,7 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
               <button 
                 onClick={() => { SoundManager.playUI('click'); onStart(); }}
                 onMouseEnter={() => SoundManager.playUI('hover')}
-                className="group relative overflow-hidden py-5 bg-amber-500 rounded-2xl font-black text-stone-950 text-xl tracking-tighter uppercase transition-all hover:scale-105 active:scale-95 shadow-[0_10px_30px_rgba(245,158,11,0.3)]"
+                className="group relative overflow-hidden py-6 bg-amber-500 rounded-2xl font-black text-stone-950 text-2xl tracking-tighter uppercase transition-all hover:scale-105 active:scale-95 shadow-[0_15px_40px_rgba(245,158,11,0.4)]"
               >
                 <div className="absolute inset-0 bg-white/20 translate-x-full group-hover:translate-x-0 transition-transform duration-500 ease-out" />
                 <span className="relative z-10">{t('new_game')}</span>
@@ -127,47 +119,47 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
               <button 
                 onClick={() => { SoundManager.playUI('click'); setShowSettings(true); }}
                 onMouseEnter={() => SoundManager.playUI('hover')}
-                className="py-4 bg-white/5 border border-white/10 rounded-2xl font-black text-white/80 uppercase tracking-widest text-[11px] hover:bg-white/10 transition-all active:scale-95"
+                className="py-5 bg-white/5 border border-white/10 rounded-2xl font-black text-white/80 uppercase tracking-widest text-[12px] hover:bg-white/10 transition-all active:scale-95 shadow-lg"
               >
                 {t('settings')}
               </button>
             </div>
           </>
         ) : (
-          <div className="w-full bg-stone-900/60 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-white/10 animate-in zoom-in-95 duration-500 shadow-2xl">
-             <h2 className="text-3xl font-black mb-8 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2>
-             <div className="space-y-6">
-                <div className="flex flex-col gap-3">
-                   <span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('language')}</span>
-                   <div className="grid grid-cols-2 gap-3">
+          <div className="w-full bg-stone-900/50 backdrop-blur-3xl p-10 rounded-[3rem] border border-white/20 animate-in zoom-in-95 duration-500 shadow-2xl">
+             <h2 className="text-4xl font-black mb-10 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2>
+             <div className="space-y-8">
+                <div className="flex flex-col gap-4">
+                   <span className="text-[12px] font-black tracking-[0.2em] text-white/40 uppercase">{t('language')}</span>
+                   <div className="grid grid-cols-2 gap-4">
                       {(['en', 'tr'] as Language[]).map(l => (
                         <button 
                           key={l} 
                           onClick={() => onUpdateSettings({...settings, language: l})} 
-                          className={`py-3.5 rounded-xl font-black text-[11px] uppercase border transition-all ${settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}
+                          className={`py-4 rounded-xl font-black text-[12px] uppercase border transition-all shadow-md ${settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
                         >
                           {l === 'en' ? 'English' : 'Türkçe'}
                         </button>
                       ))}
                    </div>
                 </div>
-                <div className="flex flex-col gap-3">
-                   <span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('gender')}</span>
-                   <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-4">
+                   <span className="text-[12px] font-black tracking-[0.2em] text-white/40 uppercase">{t('gender')}</span>
+                   <div className="grid grid-cols-2 gap-4">
                       {(['male', 'female'] as Gender[]).map(g => (
-                        <button key={g} onClick={() => onUpdatePlayerStats({...playerStats, character: {...playerStats.character, gender: g}})} className={`py-3.5 rounded-xl font-black text-[11px] uppercase border transition-all ${playerStats.character.gender === g ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{t(g)}</button>
+                        <button key={g} onClick={() => onUpdatePlayerStats({...playerStats, character: {...playerStats.character, gender: g}})} className={`py-4 rounded-xl font-black text-[12px] uppercase border transition-all shadow-md ${playerStats.character.gender === g ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}>{t(g)}</button>
                       ))}
                    </div>
                 </div>
-                <div className="flex flex-col gap-3">
-                   <span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('outfit')}</span>
-                   <div className="flex gap-4 items-center">
-                      <div className="w-12 h-12 rounded-full border-2 border-white/20 shadow-lg" style={{ backgroundColor: playerStats.character.outfitColor }} />
-                      <input type="color" value={playerStats.character.outfitColor} onChange={e => onUpdatePlayerStats({...playerStats, character: {...playerStats.character, outfitColor: e.target.value}})} className="flex-1 h-12 bg-transparent cursor-pointer rounded-xl overflow-hidden border border-white/10" />
+                <div className="flex flex-col gap-4">
+                   <span className="text-[12px] font-black tracking-[0.2em] text-white/40 uppercase">{t('outfit')}</span>
+                   <div className="flex gap-6 items-center">
+                      <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-2xl" style={{ backgroundColor: playerStats.character.outfitColor }} />
+                      <input type="color" value={playerStats.character.outfitColor} onChange={e => onUpdatePlayerStats({...playerStats, character: {...playerStats.character, outfitColor: e.target.value}})} className="flex-1 h-14 bg-transparent cursor-pointer rounded-2xl overflow-hidden border border-white/10 shadow-inner" />
                    </div>
                 </div>
              </div>
-             <button onClick={() => setShowSettings(false)} className="w-full py-4 mt-10 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-[11px] hover:bg-amber-500 transition-colors shadow-lg active:scale-95">{t('back')}</button>
+             <button onClick={() => setShowSettings(false)} className="w-full py-5 mt-12 bg-white text-stone-950 font-black rounded-2xl uppercase tracking-[0.2em] text-[12px] hover:bg-amber-500 transition-all shadow-2xl active:scale-95">{t('back')}</button>
           </div>
         )}
       </div>
@@ -182,7 +174,7 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
           animation: float-ember 12s linear infinite;
         }
         .text-glow {
-          text-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+          text-shadow: 0 0 30px rgba(245, 158, 11, 0.6);
         }
       `}</style>
     </div>

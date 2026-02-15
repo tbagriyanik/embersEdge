@@ -6,6 +6,7 @@ import { Inventory } from './components/Inventory';
 import { Crafting } from './components/Crafting';
 import { MobileControls } from './components/MobileControls';
 import { MainMenu } from './components/MainMenu';
+import { DeathScreen } from './components/DeathScreen';
 import { SoundManager } from './components/SoundManager';
 import { Minimap } from './components/Minimap';
 import { PlayerStats, Item, Entity, GameState, EntityType, TileType, GameSettings, Language, Projectile, WeatherType } from './types';
@@ -94,7 +95,8 @@ const App: React.FC = () => {
     ripples: {x: number, y: number, startTime: number}[],
     particles: {id: string, x: number, y: number, vx: number, vy: number, life: number, color: string, size: number}[],
     shake: number,
-    isRecentlyAttackedByAnimal: boolean
+    isRecentlyAttackedByAnimal: boolean,
+    isDead: boolean
   }>({
     playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 },
     playerStats: INITIAL_STATS,
@@ -106,6 +108,7 @@ const App: React.FC = () => {
     particles: [],
     shake: 0,
     isRecentlyAttackedByAnimal: false,
+    isDead: false,
     time: 600,
     isDay: true,
     gameStarted: false,
@@ -124,14 +127,14 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!gameState.gameStarted) return;
+    if (!gameState.gameStarted || gameState.isDead) return;
     const saveInterval = setInterval(() => {
-      const { birds, ripples, particles, shake, isRecentlyAttackedByAnimal, ...stateToSave } = gameStateRef.current;
+      const { birds, ripples, particles, shake, isRecentlyAttackedByAnimal, isDead, ...stateToSave } = gameStateRef.current;
       localStorage.setItem(SAVE_KEY, JSON.stringify({ ...stateToSave, gameStarted: false }));
       setHasSave(true);
     }, 10000);
     return () => clearInterval(saveInterval);
-  }, [gameState.gameStarted]);
+  }, [gameState.gameStarted, gameState.isDead]);
 
   const [uiState, setUiState] = useState({ inventoryOpen: false, craftingOpen: false, settingsOpen: false, message: '' });
   const [isResting, setIsResting] = useState(false);
@@ -153,13 +156,25 @@ const App: React.FC = () => {
   const lang = gameState.settings.language;
   const t = (key: string) => TRANSLATIONS[lang][key] || key;
 
-  const isPaused = uiState.inventoryOpen || uiState.craftingOpen || uiState.settingsOpen;
+  const isPaused = uiState.inventoryOpen || uiState.craftingOpen || uiState.settingsOpen || gameState.isDead;
 
   const showMessage = useCallback((msgKey: string, direct: boolean = false) => {
     const msg = direct ? msgKey : t(msgKey);
     setUiState(prev => ({ ...prev, message: msg }));
     setTimeout(() => setUiState(prev => ({ ...prev, message: '' })), 4000);
   }, [t]);
+
+  const handleRetry = useCallback(() => {
+    setGameState(prev => ({
+      ...prev,
+      playerPos: { x: WORLD_SIZE/2, y: WORLD_SIZE/2 + 8 },
+      playerStats: INITIAL_STATS,
+      inventory: [],
+      entities: spawnEntities(8000),
+      isDead: false,
+      gameStarted: true
+    }));
+  }, []);
 
   const canCarryItem = useCallback((itemId: string, quantity: number, currentInventory: Item[]): boolean => {
     const itemTemplate = ITEMS[itemId];
@@ -482,7 +497,7 @@ const App: React.FC = () => {
   const update = useCallback((time: number) => {
     const dt = (time - lastUpdate.current) / 1000;
     lastUpdate.current = time;
-    if (!gameStateRef.current.gameStarted) { requestRef.current = requestAnimationFrame(update); return; }
+    if (!gameStateRef.current.gameStarted || gameStateRef.current.isDead) { requestRef.current = requestAnimationFrame(update); return; }
     if (isPaused) { requestRef.current = requestAnimationFrame(update); return; }
     
     if (time > nextWeatherTime.current) {
@@ -611,14 +626,23 @@ const App: React.FC = () => {
       
       let nextHealth = prev.playerStats.health + playerHealthMod; 
       let lastDmgTime = prev.playerStats.lastDamageTime;
+      let lastCombatTime = prev.playerStats.lastCombatDamageTime;
+
       if (playerHealthMod < 0) { 
         showMessage('danger'); 
         lastDmgTime = now; 
+        if (animalAttackTriggered) {
+          lastCombatTime = now;
+        }
       }
       const hungerDrain = 0.0007; const thirstDrain = 0.0010 * thirstDrainMod;
       if (prev.playerStats.hunger <= 0 || prev.playerStats.thirst <= 0) nextHealth -= 0.1;
-      if (nextHealth <= 0) { setTimeout(() => setGameState((s: any) => ({ ...s, playerPos: { x: WORLD_SIZE/2, y: WORLD_SIZE/2 + 8 }, playerStats: INITIAL_STATS, inventory: [], gameStarted: false })), 100); return { ...finalState, playerStats: { ...prev.playerStats, health: 0 } }; }
-      return { ...finalState, playerPos: { x: finalX, y: finalY }, entities: updatedEntities, playerStats: { ...finalState.playerStats, health: Math.min(prev.playerStats.maxHealth, nextHealth), lastDamageTime: lastDmgTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, finalState.playerStats.hunger - hungerDrain), thirst: Math.max(0, finalState.playerStats.thirst - thirstDrain) }, time: (prev.time + 0.1) % 2400 };
+      
+      if (nextHealth <= 0) {
+        return { ...finalState, isDead: true, playerStats: { ...prev.playerStats, health: 0 } };
+      }
+
+      return { ...finalState, playerPos: { x: finalX, y: finalY }, entities: updatedEntities, playerStats: { ...finalState.playerStats, health: Math.min(prev.playerStats.maxHealth, nextHealth), lastDamageTime: lastDmgTime, lastCombatDamageTime: lastCombatTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, finalState.playerStats.hunger - hungerDrain), thirst: Math.max(0, finalState.playerStats.thirst - thirstDrain) }, time: (prev.time + 0.1) % 2400 };
     });
     requestRef.current = requestAnimationFrame(update);
   }, [isResting, uiState, executeInteraction, triggerRest, triggerDrink, handleEntityDeath, isPaused, canCarryItem, showMessage]);
@@ -668,7 +692,7 @@ const App: React.FC = () => {
   }, [handleInteract, uiState, handleHUDAction, isResting, screenToWorld, showMessage, executeInteraction, isPaused]);
 
   if (!gameState.gameStarted) {
-    return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(8000), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: INITIAL_STATS })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
+    return <MainMenu hasActiveSession={hasSave} onStart={() => { SoundManager.init(); SoundManager.startForestAmbience(); setGameState(prev => ({ ...prev, gameStarted: true, entities: spawnEntities(8000), inventory: [], playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 }, playerStats: INITIAL_STATS })); }} onContinue={() => { const saved = localStorage.getItem(SAVE_KEY); if (saved) { try { const loadedState = JSON.parse(saved); setGameState({ ...loadedState, gameStarted: true, birds: [], ripples: [], particles: [], shake: 0, isRecentlyAttackedByAnimal: false, isDead: false }); SoundManager.init(); SoundManager.startForestAmbience(); } catch(e) { showMessage("Failed to load game save.", true); } } }} settings={gameState.settings} onUpdateSettings={s => setGameState(prev => ({ ...prev, settings: s }))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState(prev => ({ ...prev, playerStats: ps }))} />;
   }
 
   const isNearWorkbench = !!gameState.entities.find(e => e.type === 'workbench' && Math.sqrt((e.x - gameState.playerPos.x)**2 + (e.y - gameState.playerPos.y)**2) < 2.5);
@@ -676,11 +700,32 @@ const App: React.FC = () => {
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-stone-950">
       <GameCanvas gameState={gameState} gameStateRef={gameStateRef} mouseTargetRef={mouseTargetPos} />
-      {isPaused && <div className="absolute inset-0 z-40 bg-black/10 backdrop-blur-[1px] pointer-events-none flex items-start justify-center pt-24"><div className="px-8 py-3 bg-stone-900/80 border border-white/10 rounded-full shadow-2xl"><span className="text-white/60 font-black text-xs uppercase tracking-[0.5em] animate-pulse">Game Paused</span></div></div>}
-      {isResting && <div className="absolute inset-0 z-40 bg-black/40 backdrop-blur-[2px] pointer-events-none flex items-center justify-center"><div className="text-white font-black text-4xl animate-pulse flex flex-col items-center"><span>💤</span> <span className="text-sm mt-2 opacity-50 tracking-[0.3em] uppercase">{t('rest_tent')}</span></div></div>}
+      
+      {isPaused && !gameState.isDead && (
+        <div className="absolute inset-0 z-40 bg-black/10 backdrop-blur-[1px] pointer-events-none flex items-start justify-center pt-24">
+          <div className="px-8 py-3 bg-stone-900/80 border border-white/10 rounded-full shadow-2xl">
+            <span className="text-white/60 font-black text-[12px] uppercase tracking-[0.5em] animate-pulse">Game Paused</span>
+          </div>
+        </div>
+      )}
+
+      {isResting && (
+        <div className="absolute inset-0 z-40 bg-black/40 backdrop-blur-[2px] pointer-events-none flex items-center justify-center">
+          <div className="text-white font-black text-4xl animate-pulse flex flex-col items-center">
+            <span>💤</span> 
+            <span className="text-[12px] mt-2 opacity-50 tracking-[0.3em] uppercase">{t('rest_tent')}</span>
+          </div>
+        </div>
+      )}
+
       <HUD stats={gameState.playerStats} time={gameState.time} message={uiState.message} gameState={gameState} onAction={handleHUDAction} onZoom={() => {}} onRotate={() => {}} onOpenSettings={() => setUiState(s => ({ ...s, settingsOpen: true, inventoryOpen: false, craftingOpen: false }))} />
-      <div className="absolute top-6 right-6 pointer-events-none z-50 flex flex-col items-end gap-6"><Minimap playerPos={gameState.playerPos} entities={gameState.entities} playerStats={gameState.playerStats} /></div>
+      
+      <div className="absolute top-6 right-6 pointer-events-none z-50 flex flex-col items-end gap-6">
+        <Minimap playerPos={gameState.playerPos} entities={gameState.entities} playerStats={gameState.playerStats} />
+      </div>
+
       {uiState.inventoryOpen && <Inventory items={gameState.inventory} equippedItemId={gameState.playerStats.equippedItemId} isNearWorkbench={isNearWorkbench} onAction={handleHUDAction} onClose={() => setUiState(s => ({...s, inventoryOpen: false}))} onSwitchToCrafting={() => setUiState(s => ({...s, inventoryOpen: false, craftingOpen: true}))} language={gameState.settings.language} />}
+      
       {uiState.craftingOpen && <Crafting inventory={gameState.inventory} playerLevel={gameState.playerStats.level} isNearWorkbench={isNearWorkbench} onCraft={(recipeId) => {
           const recipe = RECIPES.find(r => r.id === recipeId); if (!recipe) return;
           setGameState((prev: any) => {
@@ -699,7 +744,26 @@ const App: React.FC = () => {
              return { ...prev, inventory: ni, entities: updatedEntities, playerStats: { ...prev.playerStats, equippedItemId: newEquippedId } };
           });
       }} onClose={() => setUiState(s => ({...s, craftingOpen: false}))} onSwitchToInventory={() => setUiState(s => ({...s, inventoryOpen: true, craftingOpen: false}))} language={gameState.settings.language} />}
-      {uiState.settingsOpen && <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"><div className="w-full max-w-md bg-stone-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl text-white"><h2 className="text-3xl font-black mb-8 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2><div className="flex flex-col gap-4"><button onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, soundEnabled: !prev.settings.soundEnabled}}))} className={`py-3.5 rounded-xl font-black text-[11px] border ${gameState.settings.soundEnabled ? 'bg-amber-500 text-stone-900 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{t('sound')}: {gameState.settings.soundEnabled ? 'ON' : 'OFF'}</button><div className="flex flex-col gap-3 mt-4"><span className="text-[11px] font-black tracking-widest text-white/40 uppercase">{t('language')}</span><div className="grid grid-cols-2 gap-3">{(['en', 'tr'] as Language[]).map(l => (<button key={l} onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, language: l}}))} className={`py-3.5 rounded-xl font-black text-[11px] uppercase border transition-all ${gameState.settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{l === 'en' ? 'English' : 'Türkçe'}</button>))}</div></div></div><button onClick={() => setUiState(s => ({...s, settingsOpen: false}))} className="w-full py-4 mt-10 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-[11px] hover:bg-amber-500 transition-colors shadow-lg active:scale-95">{t('back')}</button></div></div>}
+      
+      {uiState.settingsOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-stone-900 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl text-white">
+            <h2 className="text-3xl font-black mb-8 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2>
+            <div className="flex flex-col gap-4">
+              <button onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, soundEnabled: !prev.settings.soundEnabled}}))} className={`py-3.5 rounded-xl font-black text-[12px] border ${gameState.settings.soundEnabled ? 'bg-amber-500 text-stone-900 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{t('sound')}: {gameState.settings.soundEnabled ? 'ON' : 'OFF'}</button>
+              <div className="flex flex-col gap-3 mt-4">
+                <span className="text-[12px] font-black tracking-widest text-white/40 uppercase">{t('language')}</span>
+                <div className="grid grid-cols-2 gap-3">{(['en', 'tr'] as Language[]).map(l => (<button key={l} onClick={() => setGameState(prev => ({...prev, settings: {...prev.settings, language: l}}))} className={`py-3.5 rounded-xl font-black text-[12px] uppercase border transition-all ${gameState.settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{l === 'en' ? 'English' : 'Türkçe'}</button>))}</div>
+              </div>
+            </div>
+            <button onClick={() => setUiState(s => ({...s, settingsOpen: false}))} className="w-full py-4 mt-10 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-[12px] hover:bg-amber-500 transition-colors shadow-lg active:scale-95">{t('back')}</button>
+          </div>
+        </div>
+      )}
+
+      {gameState.isDead && (
+        <DeathScreen stats={gameState.playerStats} language={gameState.settings.language} onRetry={handleRetry} />
+      )}
     </div>
   );
 };

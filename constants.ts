@@ -4,7 +4,7 @@ import { Item, Recipe, PlayerStats, Language } from './types';
 export const TILE_WIDTH = 64;
 export const TILE_HEIGHT = 64; 
 export const WORLD_SIZE = 100; 
-export const MAX_INVENTORY_SLOTS = 25; // Strict slot limit
+export const MAX_INVENTORY_SLOTS = 25; 
 
 export const TIME_SCALE = 0.02777; 
 export const SAVE_KEY = 'embers_edge_save_v5';
@@ -213,7 +213,8 @@ export const INITIAL_STATS: PlayerStats = {
   },
   isWalking: false,
   lastInteractTime: 0,
-  lastDamageTime: 0
+  lastDamageTime: 0,
+  lastCombatDamageTime: 0
 };
 
 export const ITEMS: { [key: string]: Item } = {
