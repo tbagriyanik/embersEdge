@@ -7,7 +7,7 @@ interface Props {
   items: Item[];
   equippedItemId: string | null;
   isNearWorkbench: boolean;
-  onAction: (action: 'use' | 'reorder' | 'equip' | 'repair' | 'repair_all', data: any) => void;
+  onAction: (action: 'use' | 'reorder' | 'equip' | 'repair' | 'repair_all' | 'place', data: any) => void;
   onClose: () => void;
   onSwitchToCrafting: () => void;
   language: Language;
@@ -19,22 +19,29 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
   const [isOverEquip, setIsOverEquip] = useState(false);
+  const [hoveredSlotIdx, setHoveredSlotIdx] = useState<number | null>(null);
+  
   const equipRef = useRef<HTMLDivElement>(null);
   const t = (key: string) => TRANSLATIONS[language][key] || key;
-
-  const equipment = items.filter(i => i.type === 'tool' || i.type === 'weapon');
-  const consumables = items.filter(i => i.type === 'food');
-  const materials = items.filter(i => i.type !== 'tool' && i.type !== 'weapon' && i.type !== 'food');
 
   const handlePointerMove = (e: React.PointerEvent) => {
     setMousePos({ x: e.clientX, y: e.clientY });
     if (draggedIndex === null) return;
+    
     setDragPos({ x: e.clientX, y: e.clientY });
+    
     if (equipRef.current) {
       const rect = equipRef.current.getBoundingClientRect();
       const dragItem = items[draggedIndex];
       const canEquip = dragItem.type === 'tool' || dragItem.type === 'weapon';
       setIsOverEquip(canEquip && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom);
+    }
+
+    const slotElement = document.elementsFromPoint(e.clientX, e.clientY).find(el => el.hasAttribute('data-slot-idx'));
+    if (slotElement) {
+        setHoveredSlotIdx(parseInt(slotElement.getAttribute('data-slot-idx') || '-1'));
+    } else {
+        setHoveredSlotIdx(null);
     }
   };
 
@@ -47,6 +54,9 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
       <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 sm:gap-3">
         {itemsToDraw.map((item) => {
            const globalIdx = items.findIndex(i => i === item);
+           const isDragged = draggedIndex === globalIdx;
+           const isHoveredTarget = hoveredSlotIdx === globalIdx;
+
            return (
               <div 
                 key={`${item.id}-${globalIdx}`} 
@@ -59,8 +69,16 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
                 }} 
                 onPointerEnter={() => !draggedIndex && setHoveredItem(item)}
                 onPointerLeave={() => setHoveredItem(null)}
-                onClick={() => onAction('use', item)}
-                className={`relative aspect-square rounded-full border-2 flex items-center justify-center text-3xl sm:text-4xl transition-all cursor-pointer shadow-lg ${equippedItemId === item.id ? 'border-amber-400 bg-amber-500/40 scale-105' : 'border-white/10 bg-white/5 hover:bg-white/15'}`}
+                onClick={() => {
+                    if (draggedIndex === null) {
+                        if (item.placeEntity) onAction('place', item);
+                        else onAction('use', item);
+                    }
+                }}
+                className={`relative aspect-square rounded-full border-2 flex items-center justify-center text-3xl sm:text-4xl transition-all cursor-pointer shadow-lg 
+                  ${equippedItemId === item.id ? 'border-amber-400 bg-amber-500/40 scale-105' : 'border-white/10 bg-white/5 hover:bg-white/15'}
+                  ${isDragged ? 'opacity-30' : 'opacity-100'}
+                  ${isHoveredTarget ? 'scale-110 border-amber-300 bg-white/10' : ''}`}
               >
                 {item.icon}
                 {item.quantity > 1 && (
@@ -73,6 +91,9 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
                     <div className="h-full bg-emerald-400" style={{ width: `${(item.durability / (item.maxDurability || 1)) * 100}%` }} />
                   </div>
                 )}
+                {item.placeEntity && (
+                   <span className="absolute -top-1 -right-1 bg-emerald-500 w-3 h-3 rounded-full border border-stone-900 animate-pulse"></span>
+                )}
               </div>
            );
         })}
@@ -81,22 +102,27 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
     </div>
   );
 
+  const equipment = items.filter(i => i.type === 'tool' || i.type === 'weapon');
+  const consumables = items.filter(i => i.type === 'food');
+  const structures = items.filter(i => i.type === 'structure');
+  const materials = items.filter(i => i.type === 'resource' || i.type === 'material');
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md select-none" 
          onPointerMove={handlePointerMove} 
          onPointerUp={(e) => {
             if (draggedIndex === null) return;
             const dragItem = items[draggedIndex];
-            if (isOverEquip && (dragItem.type === 'tool' || dragItem.type === 'weapon')) onAction('equip', dragItem);
-            else {
-              const slotElement = document.elementsFromPoint(e.clientX, e.clientY).find(el => el.hasAttribute('data-slot-idx'));
-              if (slotElement) {
-                const targetIdx = parseInt(slotElement.getAttribute('data-slot-idx') || '-1');
-                if (targetIdx !== -1 && targetIdx !== draggedIndex) onAction('reorder', { fromIdx: draggedIndex, toIdx: targetIdx });
-              }
+            
+            if (isOverEquip && (dragItem.type === 'tool' || dragItem.type === 'weapon')) {
+                onAction('equip', dragItem);
+            } else if (hoveredSlotIdx !== null && hoveredSlotIdx !== draggedIndex) {
+                onAction('reorder', { fromIdx: draggedIndex, toIdx: hoveredSlotIdx });
             }
+            
             setDraggedIndex(null);
             setIsOverEquip(false);
+            setHoveredSlotIdx(null);
          }}>
       <div className="w-full max-w-5xl max-h-[90vh] bg-stone-900/40 backdrop-blur-3xl border border-white/20 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="p-6 sm:p-8 border-b border-white/10 flex justify-between items-center bg-white/5">
@@ -119,10 +145,11 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
           <div className="md:w-1/3 flex flex-row md:flex-col gap-6 items-center md:items-stretch">
             <div 
               ref={equipRef} 
-              className={`w-32 h-32 md:w-full md:aspect-square relative rounded-full border-4 flex items-center justify-center text-6xl md:text-8xl transition-all shadow-2xl ${isOverEquip ? 'bg-amber-400/20 border-amber-400' : 'bg-black/30 border-white/10'}`}
+              className={`w-32 h-32 md:w-full md:aspect-square relative rounded-full border-4 flex items-center justify-center text-6xl md:text-8xl transition-all shadow-2xl ${isOverEquip ? 'bg-amber-400/20 border-amber-400 scale-105' : 'bg-black/30 border-white/10'}`}
             >
                {items.find(i => i.id === equippedItemId)?.icon || <span className="opacity-10">⚔️</span>}
                <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none rounded-full" />
+               {isOverEquip && <div className="absolute inset-0 border-4 border-amber-400 rounded-full animate-ping opacity-30" />}
             </div>
             
             <div className="flex-1 flex flex-col gap-4">
@@ -143,10 +170,21 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
           <div className="flex-1 overflow-y-auto pr-3 custom-scrollbar">
              <InventoryGrid itemsToDraw={equipment} title="Equipment" icon="⚔️" />
              <InventoryGrid itemsToDraw={consumables} title="Consumables" icon="🫐" />
+             <InventoryGrid itemsToDraw={structures} title="Structures" icon="🏗️" />
              <InventoryGrid itemsToDraw={materials} title="Materials" icon="🪵" />
           </div>
         </div>
       </div>
+
+      {/* Drag Ghost */}
+      {draggedIndex !== null && (
+        <div 
+          className="fixed pointer-events-none z-[400] text-5xl sm:text-6xl drop-shadow-2xl opacity-80"
+          style={{ left: dragPos.x - 30, top: dragPos.y - 30 }}
+        >
+          {items[draggedIndex].icon}
+        </div>
+      )}
 
       {/* Tooltip */}
       {hoveredItem && !draggedIndex && (
@@ -157,6 +195,7 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
             <span className="text-amber-500 font-black text-[12px] sm:text-[14px] uppercase tracking-tight">{hoveredItem.name}</span>
           </div>
           <p className="text-[10px] sm:text-[12px] text-white/70 leading-relaxed font-medium">{hoveredItem.description}</p>
+          {hoveredItem.placeEntity && <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">PLACEABLE</p>}
         </div>
       )}
     </div>

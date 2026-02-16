@@ -46,6 +46,7 @@ export const SoundManager = {
     windGain.connect(this.ctx.destination);
     whiteNoise.start();
 
+    // Occasional sounds
     const spawnBird = () => {
       if (!this.ctx) return;
       if (this.isDay && this.soundEnabled) {
@@ -233,10 +234,25 @@ export const SoundManager = {
     osc.start(); osc.stop(now + 0.15);
   },
 
-  play(type: 'click' | 'gather' | 'craft' | 'eat' | 'step') {
+  playBuild() {
+    if (!this.ctx || !this.soundEnabled) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(100, now);
+    osc.frequency.linearRampToValueAtTime(50, now + 0.1);
+    g.gain.setValueAtTime(0.1, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.connect(g); g.connect(this.ctx.destination);
+    osc.start(); osc.stop(now + 0.15);
+  },
+
+  play(type: 'click' | 'gather' | 'craft' | 'eat' | 'step' | 'build') {
     if (type === 'click') this.playUI('click');
     else if (type === 'craft') this.playUI('fanfare');
     else if (type === 'gather') this.playGather('bush_berry');
     else if (type === 'eat') this.playGather('bush_berry');
+    else if (type === 'build') this.playBuild();
   }
 };

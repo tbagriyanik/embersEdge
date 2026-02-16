@@ -1,684 +1,700 @@
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { GameCanvas } from './components/GameCanvas';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { GameState, PlayerStats, Entity, Particle, Projectile, FloatingText, WeatherState, Item, TileType, GameSettings, WeatherType, EntityType } from './types';
+import { INITIAL_STATS, TILE_WIDTH, TILE_HEIGHT, ITEMS, RECIPES, CHUNK_SIZE, SAVE_KEY, SETTINGS_SAVE_KEY, TRANSLATIONS, GATHER_BASE_DAMAGE, GATHER_XP_PER_HIT, GATHER_ITEM_QUANTITY, GATHER_TOOL_REQUIREMENTS, MAX_INVENTORY_SLOTS, GATHER_HAND_DAMAGE, GATHER_TOOL_BOOST } from './constants';
 import { HUD } from './components/HUD';
+import { GameCanvas } from './components/GameCanvas';
+import { MobileControls } from './components/MobileControls';
 import { Inventory } from './components/Inventory';
 import { Crafting } from './components/Crafting';
+import { Container } from './components/Container';
 import { MainMenu } from './components/MainMenu';
 import { DeathScreen } from './components/DeathScreen';
-import { SoundManager } from './components/SoundManager';
 import { Minimap } from './components/Minimap';
-import { PlayerStats, Item, Entity, GameState, EntityType, TileType, GameSettings, Language, Projectile, WeatherType } from './types';
-import { INITIAL_STATS, WORLD_SIZE, ITEMS, RECIPES, TRANSLATIONS, TILE_WIDTH, TILE_HEIGHT, SAVE_KEY, SETTINGS_SAVE_KEY, MAX_INVENTORY_SLOTS } from './constants';
+import { SoundManager } from './components/SoundManager';
+import { InputManager } from './InputManager';
 
-export const getTileType = (x: number, y: number, level: number = 1): TileType => {
-  const dx = x - WORLD_SIZE / 2;
-  const dy = y - WORLD_SIZE / 2;
-  const distToCenter = Math.sqrt(dx * dx + dy * dy);
-  const borderSize = 4;
-  if (x < borderSize || x >= WORLD_SIZE - borderSize || y < borderSize || y >= WORLD_SIZE - borderSize) return 'water';
-  if (distToCenter < 5) return 'water';
-  if (distToCenter < 7.5) return 'sand';
-  const n1 = Math.sin(x * 0.4) * Math.cos(y * 0.4);
-  const n2 = Math.sin(x * 0.2 + y * 0.2) * 0.5;
-  const combinedNoise = n1 * 0.6 + n2 * 0.3;
-  if (combinedNoise > 0.65) return 'water';
-  if (combinedNoise > 0.45) return 'sand';
+export const calculateTileType = (x: number, y: number): TileType => {
+  const sin = Math.sin;
+  const val = sin(x * 0.1) + sin(y * 0.1) + sin(x * 0.3 + y * 0.3) * 0.5;
+  if (val < -1.2) return 'water';
+  if (val < -1.0) return 'sand';
+  if (val > 1.5) return 'snow_tile';
+  if (val > 1.2) return 'stone';
   return 'grass';
 };
 
-export const spawnEntities = (count: number, safeX?: number, safeY?: number, safeRadius: number = 15): Entity[] => {
-  const entities: Entity[] = [];
-  const types: EntityType[] = ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'deer', 'rabbit', 'bear', 'scorpion', 'crab'];
-  
-  let attempts = 0;
-  const maxAttempts = count * 3;
-
-  while (entities.length < count && attempts < maxAttempts) {
-    attempts++;
-    const x = Math.random() * (WORLD_SIZE - 10) + 5;
-    const y = Math.random() * (WORLD_SIZE - 10) + 5;
-    const tile = getTileType(x, y);
-    
-    if (tile === 'water') continue;
-
-    let nearWater = false;
-    const offsets = [[2.5, 0], [-2.5, 0], [0, 2.5], [0, -2.5]];
-    for (const [ox, oy] of offsets) {
-      if (getTileType(x + ox, y + oy) === 'water') {
-        nearWater = true;
-        break;
-      }
-    }
-
-    if (!nearWater && Math.random() < 0.85) continue;
-
-    let type = types[Math.floor(Math.random() * types.length)];
-    if (tile === 'sand') type = Math.random() > 0.5 ? 'tree_palm' : (Math.random() > 0.5 ? 'scorpion' : 'crab');
-    else if (type === 'tree_palm' || type === 'scorpion' || type === 'crab') type = 'tree_oak';
-    
-    const hostiles = ['bear', 'scorpion', 'crab'];
-    if (hostiles.includes(type) && safeX !== undefined && safeY !== undefined) {
-      const distToSpawn = Math.sqrt((x - safeX)**2 + (y - safeY)**2);
-      if (distToSpawn < safeRadius) continue;
-    }
-
-    if (type === 'bear' && Math.random() > 0.1) continue;
-    if (type === 'scorpion' && Math.random() > 0.2) continue;
-
-    entities.push({ 
-      id: `ent-${entities.length}-${Date.now()}`, 
-      x, y, 
-      type: type as EntityType, 
-      health: 5, 
-      maxHealth: 5, 
-      spawnTime: Date.now(), 
-      aiState: 'idle', 
-      lastAiTick: Date.now() + Math.random() * 2000 
-    });
-  }
-  return entities;
-};
-
-export const findSafePlayerSpawn = (startX: number, startY: number, entities: Entity[]): { x: number; y: number } => {
-  const isOccupied = (tx: number, ty: number) => {
-    if (getTileType(tx, ty) === 'water') return true;
-    return entities.some(e => 
-      !['road', 'bridge', 'rabbit', 'scorpion', 'deer', 'crab'].includes(e.type) && 
-      Math.sqrt((e.x - tx) ** 2 + (e.y - ty) ** 2) < 1.0
-    );
-  };
-  if (!isOccupied(startX, startY)) return { x: startX, y: startY };
-  for (let radius = 1; radius < 20; radius++) {
-    for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
-      const tx = startX + Math.cos(angle) * radius;
-      const ty = startY + Math.sin(angle) * radius;
-      if (tx > 5 && tx < WORLD_SIZE - 5 && ty > 5 && ty < WORLD_SIZE - 5 && !isOccupied(tx, ty)) {
-        return { x: tx, y: ty };
-      }
-    }
-  }
-  return { x: startX, y: startY }; 
-};
-
-export const findPlacementSpot = (x: number, y: number, entities: Entity[]): { x: number; y: number } | null => {
-  const angles = [0, Math.PI / 4, Math.PI / 2, (3 * Math.PI) / 4, Math.PI, (5 * Math.PI) / 4, (3 * Math.PI) / 2, (7 * Math.PI) / 4];
-  const distance = 1.6;
-  for (const angle of angles) {
-    const targetX = x + Math.cos(angle) * distance;
-    const targetY = y + Math.sin(angle) * distance;
-    if (targetX < 2 || targetX >= WORLD_SIZE - 2 || targetY < 2 || targetY >= WORLD_SIZE - 2) continue;
-    if (getTileType(targetX, targetY) === 'water') continue;
-    const collides = entities.some((e: Entity) => !['road', 'bridge', 'rabbit', 'scorpion', 'deer'].includes(e.type) && Math.sqrt((e.x - targetX) ** 2 + (e.y - targetY) ** 2) < 0.8);
-    if (!collides) return { x: targetX, y: targetY };
-  }
-  return null;
-};
-
-const CAMPFIRE_LIFESPAN = 60000;
-const PLAYER_INVINCIBILITY_MS = 1000;
+const FARM_GROWTH_TIME = 60; // seconds per stage
 
 const App: React.FC = () => {
-  const [gameState, setGameState] = useState<any>(() => {
-    let initialSettings: GameSettings = { language: 'en', soundEnabled: true };
-    let initialCharacter = INITIAL_STATS.character;
-    const savedSettings = localStorage.getItem(SETTINGS_SAVE_KEY);
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed.settings) initialSettings = parsed.settings;
-        if (parsed.character) initialCharacter = parsed.character;
-      } catch (e) { console.error("Persistence: Settings load failed", e); }
-    }
-    return {
-      playerPos: { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 + 8 },
-      playerStats: { ...INITIAL_STATS, character: initialCharacter },
-      inventory: [], entities: [], projectiles: [], birds: [], ripples: [], particles: [], shake: 0,
-      isRecentlyAttackedByAnimal: false, isDead: false, time: 600, isDay: true, gameStarted: false,
-      weather: { type: 'clear', intensity: 0, transition: 0 }, settings: initialSettings,
-      viewConfig: { zoom: 1.0, rotation: 0, cameraOffsetX: 0, cameraOffsetY: 0 }
-    };
+  const [gameStarted, setGameStarted] = useState(false);
+  const [activeModal, setActiveModal] = useState<'none' | 'inventory' | 'crafting' | 'container' | 'settings'>('none');
+  const [isDead, setIsDead] = useState(false);
+  const [isNearWorkbench, setIsNearWorkbench] = useState(false);
+  const [placingEntityType, setPlacingEntityType] = useState<EntityType | null>(null);
+  
+  const gameState = useRef<GameState>({
+    playerPos: { x: 0, y: 0 },
+    playerStats: { ...INITIAL_STATS },
+    inventory: [],
+    entities: [],
+    projectiles: [],
+    floatingTexts: [],
+    particles: [],
+    time: 800,
+    isDay: true,
+    gameStarted: false, 
+    isPaused: false,
+    weather: { type: 'clear', intensity: 0, transitionTimer: 0 },
+    settings: { language: 'en', soundEnabled: true },
+    viewConfig: { zoom: 1, rotation: 0, cameraOffsetX: 0, cameraOffsetY: 0 },
+    chunks: {},
+    hoveredEntityId: null
   });
 
-  const [uiState, setUiState] = useState({ inventoryOpen: false, craftingOpen: false, settingsOpen: false, message: '' });
-  const [hasSave, setHasSave] = useState(false);
-  const [isResting, setIsResting] = useState(false);
-
-  const gameStateRef = useRef<any>(gameState);
-  const uiStateRef = useRef<any>(uiState);
-  const isRestingRef = useRef<boolean>(false);
-  const activeKeys = useRef<Set<string>>(new Set());
   const velocity = useRef({ x: 0, y: 0 });
-  const lastUpdate = useRef(performance.now());
-  const nextWeatherTime = useRef(performance.now() + 60000);
-  const targetWeather = useRef<WeatherType>('clear');
-  const mouseTargetPos = useRef<{ x: number, y: number } | null>(null);
-  const targetEntityId = useRef<string | null>(null);
-  const isPanning = useRef(false);
-  const lastMousePos = useRef({ x: 0, y: 0 });
-  const requestRef = useRef<number>(0);
+  const lastTime = useRef<number>(0);
+  const animationFrameId = useRef<number>(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
-  useEffect(() => { uiStateRef.current = uiState; }, [uiState]);
-  useEffect(() => { isRestingRef.current = isResting; }, [isResting]);
+  const [uiState, setUiState] = useState<number>(0);
+  const [message, setMessage] = useState<string>('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [hasSave, setHasSave] = useState(false);
 
-  const lang: Language = gameState.settings.language;
-  const t = useCallback((key: string) => TRANSLATIONS[lang][key] || key, [lang]);
-  const isPaused = useMemo(() => uiState.inventoryOpen || uiState.craftingOpen || uiState.settingsOpen || gameState.isDead, [uiState, gameState.isDead]);
-  const isPausedRef = useRef(isPaused);
-  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  const inputManagerRef = useRef<InputManager | null>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(SAVE_KEY);
-    if (saved) { try { JSON.parse(saved); setHasSave(true); } catch(e) { setHasSave(false); } }
+  const getTileAt = useCallback((x: number, y: number): TileType => {
+    const cx = Math.floor(x / CHUNK_SIZE);
+    const cy = Math.floor(y / CHUNK_SIZE);
+    const key = `${cx},${cy}`;
+    const chunk = gameState.current.chunks[key];
+    if (chunk) {
+      const lx = ((Math.floor(x) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+      const ly = ((Math.floor(y) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+      return chunk[lx][ly];
+    }
+    return calculateTileType(Math.floor(x), Math.floor(y));
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(SETTINGS_SAVE_KEY, JSON.stringify({ settings: gameState.settings, character: gameState.playerStats.character }));
-  }, [gameState.settings, gameState.playerStats.character]);
+  const saveSettings = useCallback(() => {
+    localStorage.setItem(SETTINGS_SAVE_KEY, JSON.stringify(gameState.current.settings));
+    localStorage.setItem('embers_character_config', JSON.stringify(gameState.current.playerStats.character));
+    SoundManager.updateAmbienceState(gameState.current.isDay, gameState.current.settings.soundEnabled);
+  }, []);
 
-  useEffect(() => {
-    const onBlur = () => {
-      if (gameStateRef.current.gameStarted && !gameStateRef.current.isDead) {
-        setGameState((p: any) => ({ ...p, gameStarted: false }));
-      }
+  const saveGame = useCallback(() => {
+    if (!gameStarted) return;
+    const data = {
+      playerPos: gameState.current.playerPos,
+      playerStats: gameState.current.playerStats,
+      inventory: gameState.current.inventory,
+      entities: gameState.current.entities,
+      time: gameState.current.time,
+      weather: gameState.current.weather,
+      chunks: gameState.current.chunks
     };
-    window.addEventListener('blur', onBlur);
-    return () => window.removeEventListener('blur', onBlur);
-  }, []);
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    setHasSave(true);
+  }, [gameStarted]);
 
-  const showMessage = useCallback((msgKey: string, direct: boolean = false) => {
-    const currentLang: Language = gameStateRef.current.settings.language;
-    const msg = direct ? msgKey : TRANSLATIONS[currentLang][msgKey] || msgKey;
-    setUiState(prev => ({ ...prev, message: msg }));
-    setTimeout(() => setUiState(prev => ({ ...prev, message: '' })), 4000);
-  }, []);
-
-  const canCarryItem = useCallback((itemId: string, quantity: number, currentInventory: Item[]): boolean => {
-    const itemTemplate = ITEMS[itemId];
-    if (!itemTemplate) return true;
-    let remaining = quantity;
-    if (itemTemplate.stackable) {
-      currentInventory.filter(i => i.id === itemId && i.quantity < (i.maxStack || 99)).forEach(s => { remaining -= Math.min(remaining, (s.maxStack || 99) - s.quantity); });
+  const checkLevelUp = useCallback((stats: PlayerStats) => {
+    const threshold = stats.level * 250;
+    if (stats.xp >= threshold) {
+      stats.level++;
+      stats.xp -= threshold;
+      stats.health = 100;
+      stats.hunger = 100;
+      stats.thirst = 100;
+      const t = (key: string) => TRANSLATIONS[gameState.current.settings.language][key] || key;
+      showMessage(t('level_up'));
+      addFloatingText(gameState.current.playerPos.x, gameState.current.playerPos.y, t('level_up'), '#fbbf24');
+      SoundManager.playUI('fanfare');
+      spawnParticles(gameState.current.playerPos.x, gameState.current.playerPos.y, 'spark', 15, '#fbbf24', 1.5);
     }
-    if (remaining <= 0) return true;
-    const slotsNeeded = itemTemplate.stackable ? Math.ceil(remaining / (itemTemplate.maxStack || 99)) : remaining;
-    return (currentInventory.length + slotsNeeded) <= MAX_INVENTORY_SLOTS;
   }, []);
 
-  const addItemsToInventory = useCallback((itemId: string, quantity: number, currentInventory: Item[]): Item[] => {
-    const itemTemplate = ITEMS[itemId];
-    if (!itemTemplate) return currentInventory;
-    const newInv = [...currentInventory];
-    let remaining = quantity;
-    if (itemTemplate.stackable) {
-      for (let i = 0; i < newInv.length && remaining > 0; i++) {
-        if (newInv[i].id === itemId && newInv[i].quantity < (newInv[i].maxStack || 99)) {
-          const add = Math.min(remaining, (newInv[i].maxStack || 99) - newInv[i].quantity);
-          newInv[i] = { ...newInv[i], quantity: newInv[i].quantity + add };
-          remaining -= add;
+  const getUsableItemsForQuickSlots = useCallback((inventory: Item[]): Item[] => {
+    const itemsInInventory = inventory.filter(i => ['tool', 'weapon', 'food', 'structure'].includes(i.type));
+    const uniqueMap = new Map<string, { item: Item, total: number, hasOverflow: boolean, maxStack: number }>();
+    itemsInInventory.forEach(i => {
+        const existing = uniqueMap.get(i.id);
+        if (!existing) {
+            uniqueMap.set(i.id, { item: i, total: i.quantity, hasOverflow: false, maxStack: i.maxStack || 99 });
+        } else {
+            const updatedTotal = (existing.total || 0) + i.quantity;
+            uniqueMap.set(i.id, { ...existing, total: updatedTotal, hasOverflow: updatedTotal > (existing.maxStack || 99) });
         }
-      }
-    }
-    while (remaining > 0) {
-      const add = itemTemplate.stackable ? Math.min(remaining, (itemTemplate.maxStack || 99)) : 1;
-      newInv.push({ ...itemTemplate, quantity: add });
-      remaining -= itemTemplate.stackable ? add : 1;
-    }
-    return newInv;
+    });
+    return Array.from(uniqueMap.values()).map(data => data.item);
   }, []);
 
-  const triggerDrink = useCallback(() => {
-    setGameState((prev: any) => {
-      if (prev.playerStats.thirst >= 100) { showMessage('full'); return prev; }
-      showMessage('drink_water');
-      return { ...prev, playerStats: { ...prev.playerStats, thirst: Math.min(100, prev.playerStats.thirst + 20) } };
+  const addFloatingText = (x: number, y: number, text: string, color: string) => {
+    gameState.current.floatingTexts.push({
+      id: Math.random().toString(),
+      x, y, text, color,
+      life: 1.5,
+      vy: -0.5
     });
-  }, [showMessage]);
+  };
 
-  const handleEntityDeath = useCallback((target: Entity, prev: any): any => {
-    const xpGain = ['deer', 'rabbit', 'bear', 'scorpion', 'crab'].includes(target.type) ? 60 : 30;
-    const updatedEntities = prev.entities.filter((e: Entity) => e.id !== target.id);
-    let rewardId = 'berry'; let qty = 1;
-    if (target.type.includes('tree')) rewardId = 'wood';
-    else if (target.type.includes('rock')) rewardId = target.type === 'rock_iron' ? 'iron' : 'stone';
-    else if (['deer', 'bear', 'scorpion', 'crab', 'rabbit'].includes(target.type)) { rewardId = 'meat_raw'; qty = target.type === 'bear' ? 3 : (target.type === 'deer' ? 2 : 1); }
-    if (!canCarryItem(rewardId, qty, prev.inventory)) { showMessage('inv_full'); return { ...prev, entities: updatedEntities }; }
-    const newInv = addItemsToInventory(rewardId, qty, prev.inventory);
-    let newXp = prev.playerStats.xp + xpGain; let newLevel = prev.playerStats.level;
-    const threshold = newLevel * 250;
-    if (newXp >= threshold) { newLevel += 1; newXp -= threshold; SoundManager.playUI('fanfare'); setTimeout(() => showMessage('level_up'), 500); }
-    return { ...prev, entities: updatedEntities, inventory: newInv, playerStats: { ...prev.playerStats, xp: newXp, level: newLevel, health: newLevel > prev.playerStats.level ? prev.playerStats.maxHealth : prev.playerStats.health, stamina: newLevel > prev.playerStats.level ? prev.playerStats.maxStamina : prev.playerStats.stamina, lastInteractTime: performance.now() } };
-  }, [showMessage, canCarryItem, addItemsToInventory]);
+  const spawnParticles = (x: number, y: number, type: Particle['type'], count: number, color: string, sizeScale = 1) => {
+    for (let i = 0; i < count; i++) {
+      gameState.current.particles.push({
+        id: Math.random(),
+        x, y,
+        vx: (Math.random() - 0.5) * (type === 'smoke' ? 1 : 5),
+        vy: type === 'smoke' ? -1 - Math.random() : (Math.random() - 0.5) * 5,
+        life: type === 'smoke' ? 2.0 : 1.0,
+        maxLife: type === 'smoke' ? 2.0 : 1.0,
+        size: (Math.random() * 0.5 + 0.2) * sizeScale,
+        color,
+        type
+      });
+    }
+  };
 
-  const executeInteraction = useCallback((entityId: string) => {
-    if (isPausedRef.current) return;
-    setGameState((prev: any) => {
-      const target = prev.entities.find((e: Entity) => e.id === entityId);
-      if (!target) return prev;
-      const isTool = prev.playerStats.equippedItemId !== null;
-      if (Math.sqrt((target.x - prev.playerPos.x)**2 + (target.y - prev.playerPos.y)**2) > (isTool ? 1.8 : 1.6)) return prev;
-      if (target.type === 'tent') {
-        if (isRestingRef.current) return prev;
-        setIsResting(true); SoundManager.playUI('fanfare');
-        setTimeout(() => { setIsResting(false); setGameState((p: any) => ({ ...p, time: (p.time + 600) % 2400, playerStats: { ...p.playerStats, health: Math.min(p.playerStats.maxHealth, p.playerStats.health + 40), stamina: p.playerStats.maxStamina, hunger: Math.max(0, p.playerStats.hunger - 15) } })); }, 2000);
-        return prev;
-      }
-      if (target.type === 'workbench') { setUiState(s => ({ ...s, inventoryOpen: true })); showMessage('workbench_ready'); return prev; }
-      if (target.type === 'campfire') {
-        const rawIdx = prev.inventory.findIndex((i: Item) => i.id === 'meat_raw');
-        const berryIdx = prev.inventory.findIndex((i: Item) => i.id === 'berry');
-        if (rawIdx > -1) {
-          SoundManager.playGather('bush_berry'); showMessage('meat_cooked');
-          let ni = [...prev.inventory]; ni[rawIdx].quantity -= 1; if (ni[rawIdx].quantity <= 0) ni.splice(rawIdx, 1);
-          if (canCarryItem('meat_cooked', 1, ni)) return { ...prev, inventory: addItemsToInventory('meat_cooked', 1, ni) };
-          showMessage('inv_full'); return prev;
-        } else if (berryIdx > -1) {
-          SoundManager.playGather('bush_berry'); showMessage('berry_cooked');
-          let ni = [...prev.inventory]; ni[berryIdx].quantity -= 1; if (ni[berryIdx].quantity <= 0) ni.splice(berryIdx, 1);
-          if (canCarryItem('berry_cooked', 1, ni)) return { ...prev, inventory: addItemsToInventory('berry_cooked', 1, ni) };
-          showMessage('inv_full'); return prev;
-        } else { showMessage('need_raw_food'); return prev; }
-      }
-      SoundManager.playGather(target.type, prev.playerStats.equippedItemId);
-      const damage = prev.playerStats.equippedItemId ? (ITEMS[prev.playerStats.equippedItemId]?.effect?.damage || 1) : 1;
-      const newHealth = target.health - damage;
-      let ni = [...prev.inventory]; let newEq = prev.playerStats.equippedItemId;
-      if (newEq) {
-        const idx = ni.findIndex(i => i.id === newEq);
-        if (idx > -1) { 
-          const item = { ...ni[idx] };
-          if (item.durability !== undefined) {
-            item.durability -= 1; 
-            if (item.durability <= 0) { ni.splice(idx, 1); showMessage('broken'); newEq = null; } 
-            else ni[idx] = item;
+  const handleAction = useCallback((action: 'use' | 'reorder' | 'equip' | 'place' | 'repair' | 'repair_all' | 'fire', data: any) => {
+    const engine = gameState.current;
+    const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
+
+    if (action === 'use') {
+        if (data.type === 'food') {
+            const stats = engine.playerStats;
+            if (data.effect) {
+                stats.hunger = Math.min(100, stats.hunger + (data.effect.hunger || 0));
+                stats.health = Math.min(100, stats.health + (data.effect.health || 0));
+                SoundManager.play('eat');
+                addFloatingText(engine.playerPos.x, engine.playerPos.y, `+${data.effect.hunger} Hunger`, '#fbbf24');
+                const idx = engine.inventory.findIndex(i => i === data);
+                if (idx > -1) {
+                    engine.inventory[idx].quantity--;
+                    if (engine.inventory[idx].quantity <= 0) engine.inventory.splice(idx, 1);
+                }
+            }
+        } else if (data.type === 'tool' || data.type === 'weapon') {
+            engine.playerStats.equippedItemId = engine.playerStats.equippedItemId === data.id ? null : data.id;
+            SoundManager.playUI('equip');
+        } else if (data.type === 'structure' || data.placeEntity) {
+            setPlacingEntityType(data.placeEntity);
+            setActiveModal('none');
+        }
+    } else if (action === 'reorder') {
+        const { fromIdx, toIdx } = data;
+        if (fromIdx !== undefined && toIdx !== undefined && fromIdx !== toIdx) {
+            const inv = [...engine.inventory];
+            const temp = inv[fromIdx];
+            inv[fromIdx] = inv[toIdx];
+            inv[toIdx] = temp;
+            engine.inventory = inv;
+            SoundManager.playUI('hover');
+        }
+    } else if (action === 'equip') {
+        engine.playerStats.equippedItemId = data.id;
+        SoundManager.playUI('equip');
+    } else if (action === 'fire') {
+        const arrowIdx = engine.inventory.findIndex(i => i.id === 'arrow');
+        if (arrowIdx > -1) {
+            engine.inventory[arrowIdx].quantity--;
+            if (engine.inventory[arrowIdx].quantity <= 0) engine.inventory.splice(arrowIdx, 1);
+            
+            const dx = data.tx - engine.playerPos.x;
+            const dy = data.ty - engine.playerPos.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const speed = 25;
+            
+            engine.projectiles.push({
+                id: Math.random().toString(),
+                x: engine.playerPos.x,
+                y: engine.playerPos.y,
+                vx: (dx / dist) * speed,
+                vy: (dy / dist) * speed,
+                damage: 15,
+                ownerId: 'player',
+                life: 3,
+                type: 'arrow'
+            });
+            SoundManager.playToolAction('bow');
+            engine.playerStats.interactionAnim = 0.2;
+        } else {
+            showMessage(t('out_of_arrows'));
+        }
+    } else if (action === 'place') {
+        const { x, y } = data;
+        const newEntity: Entity = {
+            id: Math.random().toString(),
+            x, y,
+            type: placingEntityType!,
+            health: 100, maxHealth: 100
+        };
+        engine.entities.push(newEntity);
+        SoundManager.play('build');
+        showMessage(t('placed') + " " + t(placingEntityType!));
+        setPlacingEntityType(null);
+    } else if (action === 'repair_all') {
+        engine.inventory.forEach(item => {
+            if (item.durability !== undefined && item.maxDurability !== undefined) {
+                item.durability = item.maxDurability;
+            }
+        });
+        SoundManager.play('build');
+        showMessage("All items repaired!");
+    }
+    setUiState(prev => prev + 1);
+  }, [placingEntityType]);
+
+  const handleQuickSlotActivated = useCallback((slotIndex: number) => {
+    const usableItems = getUsableItemsForQuickSlots(gameState.current.inventory);
+    if (slotIndex >= 0 && slotIndex < usableItems.length) {
+      const item = usableItems[slotIndex];
+      if (item) handleAction('use', item);
+    }
+  }, [getUsableItemsForQuickSlots, handleAction]);
+
+  const showMessage = (msg: string) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(''), 3000);
+  };
+
+  const handleInteract = useCallback((entityId: string | null) => {
+    const engine = gameState.current;
+    const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
+    engine.playerStats.interactionAnim = 0.3;
+
+    if (placingEntityType) {
+        const facing = engine.playerStats.facing;
+        let ox = 0, oy = 0;
+        if (facing === 'nw') { ox = -1.2; oy = -1.2; }
+        else if (facing === 'ne') { ox = 1.2; oy = -1.2; }
+        else if (facing === 'sw') { ox = -1.2; oy = 1.2; }
+        else { ox = 1.2; oy = 1.2; }
+        handleAction('place', { x: engine.playerPos.x + ox, y: engine.playerPos.y + oy });
+        return;
+    }
+
+    if (entityId) {
+      const entity = engine.entities.find(e => e.id === entityId);
+      if (entity) {
+        if (entity.type === 'workbench') setActiveModal('crafting');
+        else if (entity.type === 'well') {
+          showMessage(t(`drink_water`));
+          engine.playerStats.thirst = Math.min(100, engine.playerStats.thirst + 40);
+          addFloatingText(engine.playerPos.x, engine.playerPos.y, `Refreshed!`, '#60a5fa');
+          SoundManager.play('eat');
+          setUiState(prev => prev + 1);
+        } else if (entity.type === 'tent') {
+          showMessage(t('rest_tent'));
+          engine.playerStats.health = Math.min(100, engine.playerStats.health + 25);
+          engine.playerStats.stamina = 100;
+          addFloatingText(engine.playerPos.x, engine.playerPos.y, `Zzz... +25 HP`, '#a855f7');
+          SoundManager.play('eat');
+          setUiState(prev => prev + 1);
+        } else if (entity.type === 'campfire') {
+          const inventory = engine.inventory;
+          const rawMeat = inventory.find(i => i.id === 'meat_raw');
+          const berries = inventory.find(i => i.id === 'berry');
+          let cookedItem: Item | null = null, consumedItem: Item | null = null;
+          if (rawMeat) { consumedItem = rawMeat; cookedItem = { ...ITEMS.meat_cooked, quantity: 1 }; }
+          else if (berries) { consumedItem = berries; cookedItem = { ...ITEMS.berry_cooked, quantity: 1 }; }
+
+          if (consumedItem && cookedItem) {
+            consumedItem.quantity--;
+            if (consumedItem.quantity <= 0) inventory.splice(inventory.indexOf(consumedItem), 1);
+            const existing = inventory.find(i => i.id === cookedItem!.id && i.quantity < (i.maxStack || 99));
+            if (existing) existing.quantity++;
+            else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push(cookedItem);
+            showMessage(t('crafted') + " " + t(cookedItem.id));
+            addFloatingText(entity.x, entity.y, t(cookedItem.id), '#fbbf24');
+            SoundManager.play('craft');
+            spawnParticles(entity.x, entity.y, 'spark', 8, '#f59e0b', 1.2);
+            engine.playerStats.xp += 10;
+            checkLevelUp(engine.playerStats);
+          } else { showMessage(t('need_raw_food')); }
+          setUiState(prev => prev + 1);
+        } else if (entity.type === 'farm_plot') {
+          if (entity.growthStage === 0 || entity.growthStage === undefined) {
+             const seedItem = engine.inventory.find(i => i.id === 'seed_berry');
+             if (seedItem) {
+               entity.growthStage = 1; entity.growthTimer = 0;
+               seedItem.quantity--;
+               if (seedItem.quantity <= 0) engine.inventory.splice(engine.inventory.indexOf(seedItem), 1);
+               showMessage(t('planted'));
+               addFloatingText(entity.x, entity.y, t('planted'), '#4ade80');
+               SoundManager.play('build');
+               spawnParticles(entity.x, entity.y, 'leaf', 5, '#15803d');
+             } else showMessage(t('need_seed_berry'));
+          } else if (entity.growthStage === 3) {
+             const berry = { ...ITEMS.berry, quantity: 3 };
+             const existing = engine.inventory.find(i => i.id === 'berry' && i.quantity < (i.maxStack || 99));
+             if (existing) existing.quantity += 3;
+             else if (engine.inventory.length < MAX_INVENTORY_SLOTS) engine.inventory.push(berry);
+             entity.growthStage = 0; entity.growthTimer = 0;
+             showMessage(t('harvested'));
+             addFloatingText(entity.x, entity.y, `+3 Berries`, '#4ade80');
+             SoundManager.play('gather');
+             spawnParticles(entity.x, entity.y, 'leaf', 8, '#1d4ed8');
+             engine.playerStats.xp += 15;
+             checkLevelUp(engine.playerStats);
           }
         }
       }
-      const updated = prev.entities.map((e: Entity) => e.id === target.id ? { ...e, health: newHealth, aiState: ['bear', 'scorpion', 'crab'].includes(e.type) ? 'hunting' : 'fleeing', isFleeing: !['bear', 'scorpion', 'crab'].includes(e.type) } : e);
-      const nextBase = { ...prev, inventory: ni, entities: updated, playerStats: { ...prev.playerStats, equippedItemId: newEq, lastInteractTime: performance.now() } };
-      return newHealth <= 0 ? handleEntityDeath(target, nextBase) : nextBase;
-    });
-  }, [showMessage, handleEntityDeath, canCarryItem, addItemsToInventory]);
+    } else {
+        const playerPos = engine.playerPos;
+        const neighbors = [{x:0, y:0}, {x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
+        const isNearWater = neighbors.some(n => getTileAt(playerPos.x + n.x, playerPos.y + n.y) === 'water');
+        if (isNearWater && engine.playerStats.thirst < 95) {
+          showMessage(t(`drink_water`));
+          engine.playerStats.thirst = Math.min(100, engine.playerStats.thirst + 20);
+          addFloatingText(playerPos.x, playerPos.y, `+20 Thirst`, '#60a5fa');
+          SoundManager.play('eat');
+          setUiState(prev => prev + 1);
+        }
+    }
+  }, [getTileAt, checkLevelUp, placingEntityType, handleAction]);
 
-  const handleInteract = useCallback(() => {
-    const s = gameStateRef.current;
-    if (!s.gameStarted || isPausedRef.current) return;
-    const nearest = s.entities.find((e: any) => Math.sqrt((e.x - s.playerPos.x)**2 + (e.y - s.playerPos.y)**2) < 1.8);
-    if (nearest) { executeInteraction(nearest.id); return; }
-    let nearWater = false;
-    for (let dx = -1.2; dx <= 1.2; dx += 0.4) { for (let dy = -1.2; dy <= 1.2; dy += 0.4) { if (getTileType(s.playerPos.x + dx, s.playerPos.y + dy) === 'water') { nearWater = true; break; } } if (nearWater) break; }
-    if (nearWater) triggerDrink();
-  }, [executeInteraction, triggerDrink]);
+  const handleGather = useCallback((entityId: string) => {
+    const engine = gameState.current;
+    const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
+    const entityIndex = engine.entities.findIndex(e => e.id === entityId);
+    if (entityIndex === -1) return;
+    engine.playerStats.interactionAnim = 0.3;
+    const targetEntity = engine.entities[entityIndex];
+    const playerStats = engine.playerStats;
+    const inventory = engine.inventory;
+    const equippedTool = inventory.find(item => item.id === playerStats.equippedItemId);
+    const equippedToolType = equippedTool ? ITEMS[equippedTool.id]?.type : 'none';
+    const preferredTools = GATHER_TOOL_REQUIREMENTS[targetEntity.type] || [];
+    let damage = GATHER_HAND_DAMAGE;
+    if (equippedToolType === 'tool' || equippedToolType === 'weapon') {
+        damage = GATHER_BASE_DAMAGE;
+        if (preferredTools.includes(equippedTool?.id || '')) damage *= GATHER_TOOL_BOOST;
+        else if (equippedTool?.id === 'axe' || equippedTool?.id === 'pickaxe') damage *= GATHER_TOOL_BOOST;
+    } else showMessage(t('bare_hands'));
+    targetEntity.health -= damage;
+    SoundManager.playGather(targetEntity.type, playerStats.equippedItemId);
+    const gatherInfo = GATHER_ITEM_QUANTITY[targetEntity.type as keyof typeof GATHER_ITEM_QUANTITY];
+    if (gatherInfo) {
+      spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo.particle as Particle['type'], 3, targetEntity.type.includes('tree') ? '#a16207' : (targetEntity.type === 'deer' || targetEntity.type === 'rabbit' ? '#ef4444' : '#fbbf24'), 0.6);
+      addFloatingText(targetEntity.x, targetEntity.y, `+${gatherInfo.quantity} ${t(gatherInfo.item)}`, '#fbbf24');
+    }
+    if (targetEntity.health > 0 && gatherInfo) {
+        const itemToAdd = { ...ITEMS[gatherInfo.item], quantity: gatherInfo.quantity };
+        const existingItem = inventory.find(i => i.id === itemToAdd.id && i.stackable && (i.quantity < (i.maxStack || 99)));
+        if (existingItem) existingItem.quantity += itemToAdd.quantity;
+        else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push(itemToAdd);
+        else showMessage(t('inv_full'));
+    }
+    let xpGain = GATHER_XP_PER_HIT;
+    if (targetEntity.type === 'deer') xpGain = 25;
+    if (targetEntity.type === 'rabbit') xpGain = 10;
+    playerStats.xp += xpGain;
+    checkLevelUp(playerStats);
+    if (equippedTool && equippedTool.durability !== undefined) {
+      equippedTool.durability = Math.max(0, equippedTool.durability - 10);
+      if (equippedTool.durability <= 0) { showMessage(t('tool_broken')); playerStats.equippedItemId = null; }
+    }
+    if (targetEntity.health <= 0) {
+      engine.entities.splice(entityIndex, 1);
+      spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo?.particle as Particle['type'] || 'dust', 10, '#a16207', 1.0);
+    }
+    setUiState(prev => prev + 1);
+  }, [checkLevelUp]);
 
-  const screenToWorld = useCallback((sx: number, sy: number) => {
-    const state = gameStateRef.current; if (!state) return null;
-    const { zoom, cameraOffsetX, cameraOffsetY } = state.viewConfig;
-    const tw = TILE_WIDTH * zoom; const th = TILE_HEIGHT * zoom;
-    const offsetX = (window.innerWidth / 2) - (state.playerPos.x * tw + tw / 2) + cameraOffsetX;
-    const offsetY = (window.innerHeight / 2) - (state.playerPos.y * th + th / 2) + cameraOffsetY;
-    return { x: (sx - offsetX) / tw, y: (sy - offsetY) / th };
-  }, []);
-
-  const update = useCallback((time: number) => {
-    const dt = (time - lastUpdate.current) / 1000;
-    lastUpdate.current = time;
-    const state = gameStateRef.current;
-    if (!state.gameStarted || state.isDead || isPausedRef.current) { requestRef.current = requestAnimationFrame(update); return; }
+  useEffect(() => {
+    const savedSettings = localStorage.getItem(SETTINGS_SAVE_KEY);
+    if (savedSettings) try { 
+      gameState.current.settings = JSON.parse(savedSettings); 
+    } catch (e) {}
+    const savedChar = localStorage.getItem('embers_character_config');
+    if (savedChar) try { 
+      gameState.current.playerStats.character = JSON.parse(savedChar); 
+    } catch (e) {}
+    setHasSave(!!localStorage.getItem(SAVE_KEY));
+    window.addEventListener('click', () => SoundManager.init(), { once: true });
     
-    if (time > nextWeatherTime.current) {
-      const weathers: WeatherType[] = ['clear', 'rain', 'fog', 'snow'];
-      targetWeather.current = weathers[Math.floor(Math.random() * weathers.length)];
-      nextWeatherTime.current = time + 60000;
+    if (!inputManagerRef.current) {
+      inputManagerRef.current = new InputManager({
+        onOpenInventory: () => setActiveModal('inventory'),
+        onOpenCrafting: () => setActiveModal('crafting'),
+        onOpenSettings: () => setActiveModal('settings'),
+        onInteract: handleInteract,
+        onGather: handleGather,
+        onPanCamera: (dx, dy) => {
+          gameState.current.viewConfig.cameraOffsetX += dx;
+          gameState.current.viewConfig.cameraOffsetY += dy;
+        },
+        onZoom: (delta) => {
+          const zoomFactor = 0.1;
+          if (delta < 0) gameState.current.viewConfig.zoom = Math.min(2, gameState.current.viewConfig.zoom + zoomFactor);
+          else gameState.current.viewConfig.zoom = Math.max(0.5, gameState.current.viewConfig.zoom - zoomFactor);
+        },
+        onClickToMove: (worldX, worldY) => {
+          const engine = gameState.current;
+          if (engine.playerStats.equippedItemId === 'bow') {
+             handleAction('fire', { tx: worldX, ty: worldY });
+             return;
+          }
+          if (placingEntityType) {
+              handleAction('place', { x: worldX, y: worldY });
+              return;
+          }
+          inputManagerRef.current?.setPlayerTargetPos({ x: worldX, y: worldY });
+          gameState.current.particles.push({
+            id: Math.random(), x: worldX, y: worldY, vx: 0, vy: 0,
+            life: 0.5, maxLife: 0.5, size: 1.0, color: 'rgba(255, 255, 255, 0.4)', type: 'ripple'
+          });
+        },
+        onQuickSlotActivated: handleQuickSlotActivated,
+        onEscape: () => {
+          if (placingEntityType) { setPlacingEntityType(null); return; }
+          if (activeModal !== 'none') setActiveModal('none');
+          else setGameStarted(false);
+        }
+      }, gameState);
+    }
+    inputManagerRef.current.init(canvasRef.current);
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    lastTime.current = performance.now();
+    gameLoop(lastTime.current);
+    const autoSaveInterval = setInterval(saveGame, 30000);
+    return () => {
+      inputManagerRef.current?.destroy();
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationFrameId.current);
+      clearInterval(autoSaveInterval);
+    };
+  }, [handleQuickSlotActivated, handleInteract, handleGather, saveGame, activeModal, getTileAt, gameStarted, placingEntityType, handleAction]);
+
+  useEffect(() => {
+    gameState.current.isPaused = activeModal !== 'none' || isDead;
+  }, [activeModal, isDead]);
+
+  const gameLoop = (timestamp: number) => {
+    const dt = Math.min((timestamp - lastTime.current) / 1000, 0.1);
+    lastTime.current = timestamp;
+    if (gameStarted && !isDead && !gameState.current.isPaused) update(dt);
+    if (Math.floor(timestamp / 100) > Math.floor((timestamp - dt * 1000) / 100)) setUiState(prev => prev + 1);
+    animationFrameId.current = requestAnimationFrame(gameLoop);
+  };
+
+  const update = (dt: number) => {
+    const engine = gameState.current;
+    const now = performance.now();
+    const keys = inputManagerRef.current?.getKeys() || {};
+    const playerTargetPos = inputManagerRef.current?.getPlayerTargetPos();
+    engine.time += dt * 5; if (engine.time >= 2400) engine.time = 0;
+    engine.isDay = engine.time > 600 && engine.time < 1800;
+    if (engine.playerStats.interactionAnim > 0) engine.playerStats.interactionAnim = Math.max(0, engine.playerStats.interactionAnim - dt);
+    const workbenchInRange = engine.entities.some(e => e.type === 'workbench' && Math.sqrt((e.x - engine.playerPos.x)**2 + (e.y - engine.playerPos.y)**2) < 3);
+    if (workbenchInRange !== isNearWorkbench) setIsNearWorkbench(workbenchInRange);
+
+    // AI and Environment logic
+    for (const ent of engine.entities) {
+      // Animal Roaming
+      if (ent.type === 'deer' || ent.type === 'rabbit') {
+        if (!ent.aiState) ent.aiState = 'idle';
+        if (!ent.lastAiTick) ent.lastAiTick = now;
+
+        if (ent.aiState === 'idle') {
+          if (now - ent.lastAiTick > 3000 + Math.random() * 5000) {
+            // Chance to start walking
+            if (Math.random() < 0.4) {
+              ent.aiState = 'grazing';
+              ent.targetX = ent.x + (Math.random() - 0.5) * 8;
+              ent.targetY = ent.y + (Math.random() - 0.5) * 8;
+              ent.lastAiTick = now;
+              ent.facing = ent.targetX > ent.x ? 'right' : 'left';
+            } else {
+              ent.lastAiTick = now;
+            }
+          }
+        } else if (ent.aiState === 'grazing') {
+          const dx = ent.targetX! - ent.x;
+          const dy = ent.targetY! - ent.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 0.2) {
+            ent.aiState = 'idle';
+            ent.lastAiTick = now;
+          } else {
+            const moveSpeed = ent.type === 'rabbit' ? 3 : 2;
+            const stepX = (dx / dist) * moveSpeed * dt;
+            const stepY = (dy / dist) * moveSpeed * dt;
+            
+            if (getTileAt(ent.x + stepX, ent.y) !== 'water') ent.x += stepX;
+            if (getTileAt(ent.x, ent.y + stepY) !== 'water') ent.y += stepY;
+          }
+        }
+      }
+      
+      // Campfire Smoke
+      if (ent.type === 'campfire' && Math.random() < 8 * dt) {
+        spawnParticles(ent.x, ent.y - 0.2, 'smoke', 1, 'rgba(150, 150, 150, 0.4)', 1.5);
+      }
     }
 
     let dx = 0, dy = 0;
-    if (!isRestingRef.current) {
-      if (activeKeys.current.has('w')) dy -= 1; if (activeKeys.current.has('s')) dy += 1;
-      if (activeKeys.current.has('a')) dx -= 1; if (activeKeys.current.has('d')) dx += 1;
-      
-      if (dx !== 0 || dy !== 0) { 
-        mouseTargetPos.current = null; 
-        targetEntityId.current = null; 
-      } else if (mouseTargetPos.current) {
-        const cur = state.playerPos; 
-        const dist = Math.sqrt((mouseTargetPos.current.x - cur.x)**2 + (mouseTargetPos.current.y - cur.y)**2);
-        
-        const interactRange = targetEntityId.current ? 1.4 : 0.3;
-        
-        if (dist > interactRange) { 
-          dx = (mouseTargetPos.current.x - cur.x) / dist; 
-          dy = (mouseTargetPos.current.y - cur.y) / dist; 
-        } else { 
-          if (targetEntityId.current) { 
-            if (targetEntityId.current === 'water_point') triggerDrink(); 
-            else executeInteraction(targetEntityId.current); 
-          } 
-          mouseTargetPos.current = null; 
-          targetEntityId.current = null;
-        }
-      }
+    if (keys['w'] || keys['arrowup']) dy -= 1;
+    if (keys['s'] || keys['arrowdown']) dy += 1;
+    if (keys['a'] || keys['arrowleft']) dx -= 1;
+    if (keys['d'] || keys['arrowright']) dx += 1;
+    if (playerTargetPos) {
+        const targetDx = playerTargetPos.x - engine.playerPos.x, targetDy = playerTargetPos.y - engine.playerPos.y;
+        const distToTarget = Math.sqrt(targetDx * targetDx + targetDy * targetDy);
+        if (distToTarget > 0.3) {
+            dx = targetDx / distToTarget; dy = targetDy / distToTarget;
+            if (keys['w'] || keys['s'] || keys['a'] || keys['d']) inputManagerRef.current?.clearPlayerTargetPos();
+        } else { inputManagerRef.current?.clearPlayerTargetPos(); dx = 0; dy = 0; velocity.current.x = 0; velocity.current.y = 0; }
     }
-
-    const moveSpeed = state.weather.type === 'snow' ? 45 : 60;
+    const isSprinting = keys['shift'] && engine.playerStats.stamina > 0;
     if (dx !== 0 || dy !== 0) {
-      const mag = Math.sqrt(dx*dx + dy*dy);
-      velocity.current.x += (dx / mag) * moveSpeed * dt;
-      velocity.current.y += (dy / mag) * moveSpeed * dt;
+      const mag = Math.sqrt(dx*dx + dy*dy); dx /= mag; dy /= mag;
+      const speed = isSprinting ? 14 : 7; const accel = 30; 
+      velocity.current.x += (dx * speed - velocity.current.x) * accel * dt;
+      velocity.current.y += (dy * speed - velocity.current.y) * accel * dt;
+      if (isSprinting) engine.playerStats.stamina = Math.max(0, engine.playerStats.stamina - 15 * dt);
+      engine.playerStats.isWalking = true;
+    } else { velocity.current.x -= velocity.current.x * 15 * dt; velocity.current.y -= velocity.current.y * 15 * dt; engine.playerStats.isWalking = false; }
+    const nextX = engine.playerPos.x + velocity.current.x * dt, nextY = engine.playerPos.y + velocity.current.y * dt;
+    if (getTileAt(nextX, engine.playerPos.y) !== 'water') engine.playerPos.x = nextX; else velocity.current.x = 0;
+    if (getTileAt(engine.playerPos.x, nextY) !== 'water') engine.playerPos.y = nextY; else velocity.current.y = 0;
+    if (Math.abs(velocity.current.x) > 0.1 || Math.abs(velocity.current.y) > 0.1) {
+        const angle = Math.atan2(velocity.current.y, velocity.current.x);
+        if (angle > -Math.PI/4 && angle <= Math.PI/4) engine.playerStats.facing = 'se';
+        else if (angle > Math.PI/4 && angle <= 3*Math.PI/4) engine.playerStats.facing = 'sw';
+        else if (angle > -3*Math.PI/4 && angle <= -Math.PI/4) engine.playerStats.facing = 'ne';
+        else engine.playerStats.facing = 'nw';
     }
-    velocity.current.x *= Math.max(0, 1 - 15 * dt); velocity.current.y *= Math.max(0, 1 - 15 * dt);
-
-    setGameState((prev: any) => {
-      const now = Date.now();
-      const perfNow = performance.now();
-      let nextT = (prev.time + 0.1) % 2400;
-      let respawned: Entity[] = []; if (nextT < prev.time) { respawned = spawnEntities(280); showMessage('new_day'); }
-      
-      let nextWeather = { ...prev.weather };
-      const transitionSpeed = 0.04;
-      if (nextWeather.type !== targetWeather.current) { 
-        nextWeather.intensity = Math.max(0, nextWeather.intensity - dt * transitionSpeed); 
-        if (nextWeather.intensity <= 0) nextWeather.type = targetWeather.current; 
-      } else {
-        nextWeather.intensity = Math.min(1.0, nextWeather.intensity + dt * transitionSpeed);
-      }
-
-      const nextProjectiles = prev.projectiles.map((p: any) => ({ ...p, x: p.x + p.vx * dt, y: p.y + p.vy * dt, life: p.life - dt })).filter((p: any) => p.life > 0);
-      const nextRipples = (prev.ripples || []).filter((r: any) => perfNow - r.startTime < 1000);
-      let pHealthMod = 0; let attacked = false;
-
-      const nextEntities = [...prev.entities, ...respawned].map(ent => {
-        if (!['deer', 'rabbit', 'bear', 'scorpion', 'crab'].includes(ent.type)) return ent;
-        const d = Math.sqrt((ent.x - prev.playerPos.x)**2 + (ent.y - prev.playerPos.y)**2);
-        let nX = ent.x; let nY = ent.y; let aC = (ent.attackCooldown || 0) - dt;
-        if (['deer', 'rabbit'].includes(ent.type)) {
-          if (d < 5 || ent.isFleeing) { const edx = ent.x - prev.playerPos.x; const edy = ent.y - prev.playerPos.y; const em = Math.sqrt(edx*edx + edy*edy); nX += (edx/em) * 4 * dt; nY += (edy/em) * 4 * dt; if (d > 12) ent.isFleeing = false; }
-        } else if (['bear', 'scorpion', 'crab'].includes(ent.type)) {
-          if (d < 7) {
-            if (d < 1.3) { if (!isRestingRef.current && aC <= 0 && now - prev.playerStats.lastDamageTime > PLAYER_INVINCIBILITY_MS) { pHealthMod -= ent.type === 'bear' ? 3 : 1; aC = 2.0; attacked = true; } }
-            else {
-              const hdx = prev.playerPos.x - ent.x; const hdy = prev.playerPos.y - ent.y; const hm = Math.sqrt(hdx*hdx + hdy*hdy);
-              let hostileSpeed = 2.5;
-              if (ent.type === 'bear') hostileSpeed = 4.5;
-              if (ent.type === 'crab') hostileSpeed = 1.2;
-              nX += (hdx/hm) * hostileSpeed * dt; nY += (hdy/hm) * hostileSpeed * dt; 
+    if (!isSprinting && engine.playerStats.hunger > 0 && engine.playerStats.thirst > 0) engine.playerStats.stamina = Math.min(100, engine.playerStats.stamina + 10 * dt);
+    engine.playerStats.hunger = Math.max(0, engine.playerStats.hunger - 0.05 * dt);
+    engine.playerStats.thirst = Math.max(0, engine.playerStats.thirst - 0.08 * dt);
+    if (engine.playerStats.hunger <= 0 || engine.playerStats.thirst <= 0) {
+        engine.playerStats.health = Math.max(0, engine.playerStats.health - 1 * dt);
+        if (engine.playerStats.health <= 0) handleDeath();
+    }
+    // Update Projectiles
+    for (let i = engine.projectiles.length - 1; i >= 0; i--) {
+        const p = engine.projectiles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+        let hit = false;
+        for (const ent of engine.entities) {
+            const d = Math.sqrt((ent.x - p.x)**2 + (ent.y - p.y)**2);
+            if (d < 0.8) {
+                ent.health -= p.damage; hit = true;
+                addFloatingText(ent.x, ent.y, `-${p.damage}`, '#ef4444');
+                spawnParticles(ent.x, ent.y, 'spark', 5, '#ffffff', 0.5);
+                if (ent.health <= 0) handleGather(ent.id);
+                break;
             }
+        }
+        if (hit || p.life <= 0) engine.projectiles.splice(i, 1);
+    }
+    for (let i = engine.particles.length - 1; i >= 0; i--) {
+        const p = engine.particles[i]; p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+        if (p.type === 'smoke') {
+          p.size += 0.5 * dt;
+          p.vx += (Math.random() - 0.5) * 0.5 * dt;
+        }
+        if (p.life <= 0) engine.particles.splice(i, 1);
+    }
+    for (let i = engine.floatingTexts.length - 1; i >= 0; i--) {
+        const ft = engine.floatingTexts[i]; ft.life -= dt; ft.y += ft.vy * dt;
+        if (ft.life <= 0) engine.floatingTexts.splice(i, 1);
+    }
+    const chunkX = Math.floor(engine.playerPos.x / CHUNK_SIZE), chunkY = Math.floor(engine.playerPos.y / CHUNK_SIZE);
+    for(let cx = chunkX - 1; cx <= chunkX + 1; cx++) for(let cy = chunkY - 1; cy <= chunkY + 1; cy++) {
+        const key = `${cx},${cy}`; if (!engine.chunks[key]) engine.chunks[key] = generateChunk(cx, cy);
+    }
+  };
+
+  const generateChunk = (cx: number, cy: number): TileType[][] => {
+      const chunk: TileType[][] = [];
+      for(let x=0; x<CHUNK_SIZE; x++) {
+          chunk[x] = [];
+          for(let y=0; y<CHUNK_SIZE; y++) {
+              const wx = cx * CHUNK_SIZE + x, wy = cy * CHUNK_SIZE + y;
+              chunk[x][y] = calculateTileType(wx, wy);
+              if (chunk[x][y] === 'grass') {
+                if (Math.random() < 0.04) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'tree_oak', health: 100, maxHealth: 100 });
+                else if (Math.random() < 0.015) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'rock_standard', health: 80, maxHealth: 80 });
+                else if (Math.random() < 0.02) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'bush_berry', health: 50, maxHealth: 50 });
+                else if (Math.random() < 0.005) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'deer', health: 60, maxHealth: 60, aiState: 'idle', lastAiTick: performance.now() });
+                else if (Math.random() < 0.008) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'rabbit', health: 20, maxHealth: 20, aiState: 'idle', lastAiTick: performance.now() });
+              }
           }
-        }
-        return { ...ent, x: Math.max(2, Math.min(WORLD_SIZE-2, nX)), y: Math.max(2, Math.min(WORLD_SIZE-2, nY)), attackCooldown: aC };
-      });
-
-      const updatedEnts = nextEntities.filter(e => e.type !== 'campfire' || !e.spawnTime || now - e.spawnTime < CAMPFIRE_LIFESPAN);
-      const mX = velocity.current.x * dt; const mY = velocity.current.y * dt;
-      const coll = (px: number, py: number) => getTileType(px, py) === 'water' || updatedEnts.some(e => !['rabbit', 'scorpion', 'deer', 'crab', 'road', 'bridge'].includes(e.type) && Math.sqrt((e.x - px)**2 + (e.y - py)**2) < 0.55);
-      
-      let fX = prev.playerPos.x; let fY = prev.playerPos.y;
-      
-      if (!coll(fX + mX, fY + mY)) { 
-        fX += mX; fY += mY; 
-      } else { 
-        if (mouseTargetPos.current) {
-          mouseTargetPos.current = null;
-          targetEntityId.current = null;
-        }
-        if (!coll(fX + mX, fY)) fX += mX; 
-        if (!coll(fX, fY + mY)) fY += mY; 
       }
-      
-      let nH = prev.playerStats.health + pHealthMod; if (pHealthMod < 0) showMessage('danger');
-      if (prev.playerStats.hunger <= 0 || prev.playerStats.thirst <= 0) nH -= 0.1;
-      if (nH <= 0) return { ...prev, isDead: true, playerStats: { ...prev.playerStats, health: 0 } };
+      return chunk;
+  };
 
-      let facing = prev.playerStats.facing;
-      if (dx !== 0 || dy !== 0) { const a = Math.atan2(dy, dx); if (a >= -Math.PI/4 && a < Math.PI/4) facing = 'se'; else if (a >= Math.PI/4 && a < 3*Math.PI/4) facing = 'sw'; else if (a >= 3*Math.PI/4 || a < -3*Math.PI/4) facing = 'nw'; else facing = 'ne'; }
+  const handleDeath = () => { setIsDead(true); SoundManager.playUI('fanfare'); };
+  const startNewGame = () => {
+    gameState.current = { ...gameState.current, playerPos: { x: 0, y: 0 }, playerStats: { ...INITIAL_STATS, character: gameState.current.playerStats.character }, inventory: [{ ...ITEMS.axe }, { ...ITEMS.pickaxe }, { ...ITEMS.wood, quantity: 20 }, { ...ITEMS.berry, quantity: 20 }, { ...ITEMS.arrow, quantity: 50 }, { ...ITEMS.bow }], entities: [], projectiles: [], particles: [], chunks: {}, time: 800, gameStarted: true, isPaused: false };
+    setIsDead(false); setActiveModal('none'); setGameStarted(true);
+  };
 
-      return { ...prev, playerPos: { x: fX, y: fY }, entities: updatedEnts, projectiles: nextProjectiles, ripples: nextRipples, weather: nextWeather, playerStats: { ...prev.playerStats, facing, health: Math.min(prev.playerStats.maxHealth, nH), lastDamageTime: pHealthMod < 0 ? now : prev.playerStats.lastDamageTime, lastCombatDamageTime: attacked ? now : prev.playerStats.lastCombatDamageTime, isWalking: Math.sqrt(velocity.current.x**2 + velocity.current.y**2) > 0.4, hunger: Math.max(0, prev.playerStats.hunger - 0.0007), thirst: Math.max(0, prev.playerStats.thirst - 0.0010) }, time: nextT };
-    });
-    requestRef.current = requestAnimationFrame(update);
-  }, [showMessage, executeInteraction, triggerDrink]);
-
-  useEffect(() => { requestRef.current = requestAnimationFrame(update); return () => cancelAnimationFrame(requestRef.current); }, [update]);
-
-  useEffect(() => {
-    const onKD = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
-      if (k === 'f') setUiState(s => ({ ...s, inventoryOpen: !s.inventoryOpen, craftingOpen: false, settingsOpen: false }));
-      if (k === 'c') setUiState(s => ({ ...s, craftingOpen: !s.craftingOpen, inventoryOpen: false, settingsOpen: false }));
-      if (k === 'escape') {
-        if (uiStateRef.current.inventoryOpen || uiStateRef.current.craftingOpen || uiStateRef.current.settingsOpen) {
-          setUiState(s => ({ ...s, craftingOpen: false, inventoryOpen: false, settingsOpen: false }));
-        } else if (gameStateRef.current.gameStarted && !gameStateRef.current.isDead) {
-          setGameState((p: any) => ({ ...p, gameStarted: false }));
-        }
-      }
-      
-      if (isPausedRef.current) return;
-      activeKeys.current.add(k);
-      
-      if (k >= '1' && k <= '9') {
-        const usable = (gameStateRef.current.inventory as Item[]).filter(i => ['tool', 'weapon', 'food'].includes(i.type));
-        const uniqueItems = Array.from(new Set(usable.map(i => i.id))).map(id => usable.find(i => i.id === id));
-        const item = uniqueItems[parseInt(k) - 1];
-        if (item) {
-          if (item.type === 'food') {
-            setGameState((p: any) => {
-              const idx = p.inventory.findIndex((i: any) => i.id === item.id);
-              if (idx === -1) return p;
-              let ni = [...p.inventory]; ni[idx].quantity -= 1; if (ni[idx].quantity <= 0) ni.splice(idx, 1);
-              return { ...p, inventory: ni, playerStats: { ...p.playerStats, hunger: Math.min(100, p.playerStats.hunger + (item.effect?.hunger || 0)), thirst: Math.min(100, p.playerStats.thirst + (item.effect?.thirst || 0)), health: Math.min(p.playerStats.maxHealth, p.playerStats.health + (item.effect?.health || 0)) } };
-            });
-            SoundManager.playGather('bush_berry');
-          } else {
-            setGameState((p: any) => ({ ...p, playerStats: { ...p.playerStats, equippedItemId: p.playerStats.equippedItemId === item.id ? null : item.id } }));
-            SoundManager.playUI('equip');
-          }
-        }
-      }
-      if (k === 'e') handleInteract();
-    };
-    const onKU = (e: KeyboardEvent) => activeKeys.current.delete(e.key.toLowerCase());
-    const onWheel = (e: WheelEvent) => { if (isPausedRef.current) return; setGameState((p: any) => ({ ...p, viewConfig: { ...p.viewConfig, zoom: Math.max(0.4, Math.min(2.5, p.viewConfig.zoom + (e.deltaY > 0 ? -0.1 : 0.1))) } })); };
-    
-    const onMD = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).tagName !== 'CANVAS' || isPausedRef.current) return;
-      if (e.button === 1 || e.button === 2) { 
-        isPanning.current = true; 
-        lastMousePos.current = { x: e.clientX, y: e.clientY }; 
-        e.preventDefault();
-        return; 
-      }
-      const wp = screenToWorld(e.clientX, e.clientY); if (!wp) return;
-      
-      if (getTileType(wp.x, wp.y) === 'water') {
-        setGameState((prev: any) => ({
-          ...prev,
-          ripples: [...(prev.ripples || []), { id: `ripple-${Date.now()}-${Math.random()}`, x: wp.x, y: wp.y, startTime: performance.now() }]
-        }));
-      }
-
-      if (gameStateRef.current.playerStats.equippedItemId === 'bow') {
-        const arrowIdx = (gameStateRef.current.inventory as Item[]).findIndex(i => i.id === 'arrow');
-        if (arrowIdx > -1) {
-          const adx = wp.x - gameStateRef.current.playerPos.x; const ady = wp.y - gameStateRef.current.playerPos.y; const ad = Math.sqrt(adx*adx + ady*ady);
-          if (ad > 0.1) {
-            const p: Projectile = { id: `arrow-${Date.now()}`, x: gameStateRef.current.playerPos.x, y: gameStateRef.current.playerPos.y, vx: (adx/ad)*12, vy: (ady/ad)*12, damage: 5, ownerId: 'player', life: 2.0 };
-            setGameState((prev: any) => {
-              let ni = [...prev.inventory]; ni[arrowIdx].quantity -= 1; if (ni[arrowIdx].quantity <= 0) ni.splice(arrowIdx, 1);
-              return { ...prev, inventory: ni, projectiles: [...prev.projectiles, p] };
-            }); SoundManager.playToolAction('bow'); return;
-          }
-        } else showMessage('out_of_arrows');
-      }
-
-      const clickedEntity = gameStateRef.current.entities.find((ent: any) => Math.sqrt((ent.x - wp.x)**2 + (ent.y - wp.y)**2) < 1.2);
-      if (clickedEntity) {
-        const d = Math.sqrt((clickedEntity.x - gameStateRef.current.playerPos.x)**2 + (clickedEntity.y - gameStateRef.current.playerPos.y)**2);
-        if (d < 1.8) {
-          executeInteraction(clickedEntity.id);
-          mouseTargetPos.current = null;
-        } else {
-          mouseTargetPos.current = { x: clickedEntity.x, y: clickedEntity.y };
-          targetEntityId.current = clickedEntity.id;
-        }
-      } else {
-        mouseTargetPos.current = wp;
-        targetEntityId.current = getTileType(wp.x, wp.y) === 'water' ? 'water_point' : null;
-        if (targetEntityId.current === 'water_point') {
-           let nearWater = false;
-           for (let dx = -1.2; dx <= 1.2; dx += 0.4) { for (let dy = -1.2; dy <= 1.2; dy += 0.4) { if (getTileType(gameStateRef.current.playerPos.x + dx, gameStateRef.current.playerPos.y + dy) === 'water') { nearWater = true; break; } } if (nearWater) break; }
-           if (nearWater) { triggerDrink(); mouseTargetPos.current = null; }
-        }
-      }
-    };
-    
-    const onMM = (e: MouseEvent) => { if (isPanning.current) { const dx = e.clientX - lastMousePos.current.x; const dy = e.clientY - lastMousePos.current.y; lastMousePos.current = { x: e.clientX, y: e.clientY }; setGameState((p: any) => ({ ...p, viewConfig: { ...p.viewConfig, cameraOffsetX: p.viewConfig.cameraOffsetX + dx, cameraOffsetY: p.viewConfig.cameraOffsetY + dy } })); } };
-    const onMU = () => isPanning.current = false;
-    
-    window.addEventListener('keydown', onKD); 
-    window.addEventListener('keyup', onKU); 
-    window.addEventListener('wheel', onWheel, { passive: false });
-    window.addEventListener('mousedown', onMD); 
-    window.addEventListener('mousemove', onMM); 
-    window.addEventListener('mouseup', onMU);
-    window.addEventListener('contextmenu', e => e.preventDefault());
-    
-    return () => {
-      window.removeEventListener('keydown', onKD); 
-      window.removeEventListener('keyup', onKU); 
-      window.removeEventListener('wheel', onWheel);
-      window.removeEventListener('mousedown', onMD); 
-      window.removeEventListener('mousemove', onMM); 
-      window.removeEventListener('mouseup', onMU);
-    };
-  }, [handleInteract, screenToWorld, showMessage, executeInteraction, triggerDrink]);
-
-  const handleStart = useCallback(() => {
-    SoundManager.init(); SoundManager.startForestAmbience(); window.focus();
-    const spawnX = WORLD_SIZE / 2;
-    const spawnY = WORLD_SIZE / 2 + 8;
-    const newEntities = spawnEntities(7000, spawnX, spawnY, 15);
-    const safePos = findSafePlayerSpawn(spawnX, spawnY, newEntities);
-    setGameState((prev: any) => ({ 
-      ...prev, 
-      gameStarted: true, 
-      entities: newEntities, 
-      inventory: [], 
-      playerPos: safePos, 
-      playerStats: { ...INITIAL_STATS, character: prev.playerStats.character }, 
-      isDead: false 
-    }));
-  }, []);
-
-  const handleContinue = useCallback(() => {
-    const saved = localStorage.getItem(SAVE_KEY);
-    if (saved) { try { const loaded = JSON.parse(saved); setGameState((p: any) => ({ ...loaded, settings: p.settings, gameStarted: true, isDead: false })); SoundManager.init(); SoundManager.startForestAmbience(); window.focus(); } catch(e) { showMessage("Failed to load.", true); } }
-  }, [showMessage]);
+  const continueGame = () => {
+    const dataStr = localStorage.getItem(SAVE_KEY);
+    if (!dataStr) return;
+    try { const data = JSON.parse(dataStr); gameState.current = { ...gameState.current, ...data, gameStarted: true, isPaused: false }; setIsDead(false); setActiveModal('none'); setGameStarted(true); } catch(e) {}
+  };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-stone-950">
-      {!gameState.gameStarted ? (
-        <MainMenu hasActiveSession={hasSave} onStart={handleStart} onContinue={handleContinue} settings={gameState.settings} onUpdateSettings={s => setGameState((p: any) => ({...p, settings: s}))} playerStats={gameState.playerStats} onUpdatePlayerStats={ps => setGameState((p: any) => ({...p, playerStats: ps}))} />
-      ) : (
-        <>
-          <GameCanvas gameState={gameState} gameStateRef={gameStateRef} mouseTargetRef={mouseTargetPos} />
-          {isPaused && !gameState.isDead && (
-            <div className="absolute inset-0 z-40 bg-black/10 backdrop-blur-[1px] pointer-events-none flex items-start justify-center pt-24">
-              <div className="px-8 py-3 bg-stone-900/80 border border-white/10 rounded-full shadow-2xl">
-                <span className="text-white/60 font-black text-[12px] uppercase tracking-[0.5em] animate-pulse">Game Paused</span>
-              </div>
-            </div>
-          )}
-          {isResting && (
-            <div className="absolute inset-0 z-40 bg-black/40 backdrop-blur-[2px] pointer-events-none flex items-center justify-center">
-              <div className="text-white font-black text-4xl animate-pulse flex flex-col items-center">
-                <span>💤</span> <span className="text-[12px] mt-2 opacity-50 tracking-[0.3em] uppercase">{t('rest_tent')}</span>
-              </div>
-            </div>
-          )}
-          <HUD stats={gameState.playerStats} time={gameState.time} message={uiState.message} gameState={gameState} onAction={(action, data) => {
-            if (action === 'use' || action === 'equip') {
-              const item = data as Item;
-              if (item.type === 'food') setGameState((p: any) => {
-                const idx = p.inventory.findIndex((i: any) => i.id === item.id);
-                if (idx === -1) return p;
-                let ni = [...p.inventory]; ni[idx].quantity -= 1; if (ni[idx].quantity <= 0) ni.splice(idx, 1);
-                return { ...p, inventory: ni, playerStats: { ...p.playerStats, hunger: Math.min(100, p.playerStats.hunger + (item.effect?.hunger || 0)), thirst: Math.min(100, p.playerStats.thirst + (item.effect?.thirst || 0)), health: Math.min(p.playerStats.maxHealth, p.playerStats.health + (item.effect?.health || 0)) } };
-              });
-              else {
-                setGameState((p: any) => ({ ...p, playerStats: { ...p.playerStats, equippedItemId: p.playerStats.equippedItemId === item.id ? null : item.id } }));
-                SoundManager.playUI('equip');
-              }
-            } else if (action === 'reorder') {
-              setGameState((p: any) => { let ni = [...p.inventory]; const it = ni[data.fromIdx]; ni.splice(data.fromIdx, 1); ni.splice(data.toIdx, 0, it); return { ...p, inventory: ni }; });
-            } else if (action === 'repair_all') {
-              setGameState((p: any) => {
-                let ni = [...p.inventory]; const cost = 5;
-                const wood = ni.filter(i => i.id === 'wood').reduce((s, i) => s + i.quantity, 0);
-                const stone = ni.filter(i => i.id === 'stone').reduce((s, i) => s + i.quantity, 0);
-                if (wood >= cost && stone >= cost) {
-                  ni = ni.map(i => (['tool', 'weapon'].includes(i.type) && i.durability !== undefined) ? { ...i, durability: i.maxDurability } : i);
-                  let wD = cost; let sD = cost;
-                  ni = ni.map(i => {
-                    if (i.id === 'wood' && wD > 0) { const d = Math.min(i.quantity, wD); wD -= d; return { ...i, quantity: i.quantity - d }; }
-                    if (i.id === 'stone' && sD > 0) { const d = Math.min(i.quantity, sD); sD -= d; return { ...i, quantity: i.quantity - d }; }
-                    return i;
-                  }).filter(i => i.quantity > 0);
-                  showMessage('Repaired!', true); SoundManager.playUI('fanfare'); return { ...p, inventory: ni };
-                } else { showMessage('need_resources'); return p; }
-              });
-            }
-          }} onZoom={() => {}} onRotate={() => {}} onOpenSettings={() => setUiState(s => ({ ...s, settingsOpen: true, inventoryOpen: false, craftingOpen: false }))} />
-          <div className="absolute top-6 right-6 pointer-events-none z-50">
-            <Minimap playerPos={gameState.playerPos} entities={gameState.entities} playerStats={gameState.playerStats} language={gameState.settings.language} />
-          </div>
-          {uiState.inventoryOpen && <Inventory items={gameState.inventory} equippedItemId={gameState.playerStats.equippedItemId} isNearWorkbench={!!gameState.entities.find((e: Entity) => e.type === 'workbench' && Math.sqrt((e.x-gameState.playerPos.x)**2+(e.y-gameState.playerPos.y)**2)<2.5)} onAction={() => {}} onClose={() => setUiState(s => ({...s, inventoryOpen: false}))} onSwitchToCrafting={() => setUiState(s => ({...s, inventoryOpen: false, craftingOpen: true}))} language={gameState.settings.language} />}
-          {uiState.craftingOpen && <Crafting inventory={gameState.inventory} playerLevel={gameState.playerStats.level} isNearWorkbench={!!gameState.entities.find((e: Entity) => e.type === 'workbench' && Math.sqrt((e.x-gameState.playerPos.x)**2+(e.y-gameState.playerPos.y)**2)<2.5)} onCraft={(recipeId) => {
-              const recipe = RECIPES.find(r => r.id === recipeId); if (!recipe) return;
-              setGameState((prev: any) => {
-                if (!Object.entries(recipe.ingredients).every(([id, q]) => prev.inventory.filter((i: any) => i.id === id).reduce((acc: number, curr: any) => acc + curr.quantity, 0) >= (q as number))) return prev;
-                if (!canCarryItem(recipe.output.id, recipe.output.quantity, prev.inventory)) { showMessage('inv_full'); return prev; }
-                let ni = [...prev.inventory];
-                Object.entries(recipe.ingredients).forEach(([id, q]) => { let rem = q as number; while (rem > 0) { const idx = ni.findIndex(i => i.id === id); if (idx > -1) { const d = Math.min(rem, ni[idx].quantity); ni[idx].quantity -= d; rem -= d; if (ni[idx].quantity <= 0) ni.splice(idx, 1); } else break; } });
-                let uE = [...prev.entities]; 
-                let pD = false;
-                let nextEq = prev.playerStats.equippedItemId;
-                
-                if (recipe.output.type === 'structure') {
-                   const spot = findPlacementSpot(prev.playerPos.x, prev.playerPos.y, uE); 
-                   if (spot) { 
-                     uE.push({ id: `struct-${Date.now()}`, x: spot.x, y: spot.y, type: recipe.output.id as EntityType, health: 10, maxHealth: 10, spawnTime: Date.now() }); 
-                     pD = true; showMessage(t('placed')+': '+recipe.name, true); SoundManager.playUI('fanfare'); 
-                   } 
-                }
-                
-                if (!pD) { 
-                  ni = addItemsToInventory(recipe.output.id, recipe.output.quantity, ni); 
-                  SoundManager.playUI('fanfare'); 
-                  showMessage(t('crafted')+': '+recipe.name, true);
-                  if ((recipe.output.type === 'tool' || recipe.output.type === 'weapon') && !nextEq) {
-                    nextEq = recipe.output.id;
-                  }
-                }
-                return { ...prev, inventory: ni, entities: uE, playerStats: { ...prev.playerStats, equippedItemId: nextEq } };
-              });
-          }} onClose={() => setUiState(s => ({...s, craftingOpen: false}))} onSwitchToInventory={() => setUiState(s => ({...s, inventoryOpen: true, craftingOpen: false}))} language={gameState.settings.language} />}
-          {uiState.settingsOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-              <div className="w-full max-w-md bg-stone-900 border border-white/10 rounded-[2.5rem] p-8 text-white shadow-2xl">
-                <h2 className="text-3xl font-black mb-8 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2>
-                <button onClick={() => setGameState((p: any) => ({...p, settings: {...p.settings, soundEnabled: !p.settings.soundEnabled}}))} className={`w-full py-3.5 rounded-xl font-black text-[12px] border mb-6 ${gameState.settings.soundEnabled ? 'bg-amber-500 text-stone-900 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{t('sound')}: {gameState.settings.soundEnabled ? 'ON' : 'OFF'}</button>
-                <div className="flex flex-col gap-3 mb-8">
-                  <span className="text-[12px] font-black tracking-widest text-white/40 uppercase">{t('language')}</span>
-                  <div className="grid grid-cols-2 gap-3">{(['en', 'tr'] as Language[]).map(l => ( <button key={l} onClick={() => setGameState((p: any) => ({...p, settings: {...p.settings, language: l}}))} className={`py-3.5 rounded-xl font-black text-[12px] uppercase border transition-all ${gameState.settings.language === l ? 'bg-amber-500 text-stone-950 border-amber-500' : 'bg-white/5 border-white/10 text-white/50'}`}>{l === 'en' ? 'English' : 'Türkçe'}</button>)) }</div>
+    <div className="relative w-full h-screen overflow-hidden bg-stone-900 select-none">
+        {gameStarted ? (
+            <>
+                <GameCanvas gameState={gameState.current} canvasRef={canvasRef} placingEntityType={placingEntityType} />
+                <HUD stats={gameState.current.playerStats} time={gameState.current.time} message={message} gameState={gameState.current} onAction={handleAction} usableItemsForQuickSlots={getUsableItemsForQuickSlots(gameState.current.inventory)} onZoom={(d) => inputManagerRef.current?.handleWheel({ deltaY: d } as WheelEvent)} onRotate={() => {}} onOpenSettings={() => setActiveModal('settings')} />
+                <div className="absolute top-4 right-4 z-50 flex gap-4">
+                    <Minimap gameState={gameState.current} />
+                    <button onClick={() => setActiveModal('inventory')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl">🎒</button>
+                    <button onClick={() => setActiveModal('crafting')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl">⚒️</button>
                 </div>
-                <button onClick={() => setUiState(s => ({...s, settingsOpen: false}))} className="w-full py-4 bg-white text-stone-950 font-black rounded-xl uppercase tracking-widest text-[12px] hover:bg-amber-500 transition-colors shadow-lg active:scale-95">{t('back')}</button>
-              </div>
-            </div>
-          )}
-          {gameState.isDead && <DeathScreen stats={gameState.playerStats} language={gameState.settings.language} onRetry={() => { handleStart(); }} />}
-        </>
-      )}
+                {activeModal === 'inventory' && <Inventory items={gameState.current.inventory} equippedItemId={gameState.current.playerStats.equippedItemId} isNearWorkbench={isNearWorkbench} onAction={handleAction} onClose={() => setActiveModal('none')} onSwitchToCrafting={() => setActiveModal('crafting')} language={gameState.current.settings.language} />}
+                {activeModal === 'crafting' && <Crafting inventory={gameState.current.inventory} playerLevel={gameState.current.playerStats.level} isNearWorkbench={isNearWorkbench} onCraft={(recipeId) => {
+                    const recipe = RECIPES.find(r => r.id === recipeId);
+                    if (recipe) {
+                        recipe.ingredients && Object.entries(recipe.ingredients).forEach(([id, qty]) => {
+                            const item = gameState.current.inventory.find(i => i.id === id);
+                            if (item) item.quantity -= (qty as number);
+                        });
+                        if (recipe.output.type === 'structure') {
+                            setPlacingEntityType(recipe.output.placeEntity!);
+                            setActiveModal('none');
+                        } else {
+                            gameState.current.inventory.push({ ...recipe.output, id: recipe.output.id + Math.random() });
+                        }
+                        showMessage(TRANSLATIONS[gameState.current.settings.language].crafted);
+                        SoundManager.play('craft');
+                        gameState.current.playerStats.xp += 20; checkLevelUp(gameState.current.playerStats);
+                    }
+                }} onClose={() => setActiveModal('none')} onSwitchToInventory={() => setActiveModal('inventory')} language={gameState.current.settings.language} />}
+                {isDead && <DeathScreen stats={gameState.current.playerStats} language={gameState.current.settings.language} onRetry={startNewGame} />}
+                {placingEntityType && (
+                    <div className="absolute bottom-32 left-1/2 -translate-x-1/2 px-6 py-3 bg-amber-600 rounded-full border border-stone-900 shadow-2xl font-black text-stone-950 uppercase tracking-widest animate-pulse z-50">
+                        Placement Mode: Click to Place {placingEntityType} (ESC to cancel)
+                    </div>
+                )}
+            </>
+        ) : (
+            <MainMenu 
+                onStart={startNewGame} 
+                onContinue={continueGame} 
+                hasActiveSession={hasSave} 
+                settings={gameState.current.settings} 
+                onUpdateSettings={(s) => { 
+                  gameState.current.settings = s; 
+                  saveSettings(); 
+                  setUiState(u => u + 1); 
+                }} 
+                playerStats={gameState.current.playerStats} 
+                onUpdatePlayerStats={(p) => { 
+                  gameState.current.playerStats = p; 
+                  saveSettings(); 
+                  setUiState(u => u + 1); 
+                }} 
+            />
+        )}
     </div>
   );
 };
+
 export default App;

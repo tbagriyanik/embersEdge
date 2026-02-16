@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { GameSettings, PlayerStats, Language, Gender } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { SoundManager } from './SoundManager';
@@ -24,8 +24,6 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-amber-900/5 to-black" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-[radial-gradient(circle,rgba(245,158,11,0.05)_0%,transparent_70%)] animate-pulse" />
-        
-        {/* Ember Particles */}
         <div className="absolute inset-0 overflow-hidden">
           {[...Array(20)].map((_, i) => (
             <div 
@@ -34,51 +32,55 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
               style={{
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 10}s`,
-                opacity: Math.random()
+                animationDelay: `${Math.random() * 40}s`, // Very slow delayed start
+                opacity: Math.random() * 0.7 + 0.1
               }}
             />
           ))}
         </div>
       </div>
 
-      {/* Control Summary Table */}
-      <div className="absolute bottom-8 right-8 z-30 hidden lg:flex flex-col gap-6 p-8 bg-black/40 backdrop-blur-3xl border border-white/10 rounded-[2.5rem] animate-in fade-in slide-in-from-right-8 duration-1000 delay-500 shadow-2xl max-w-sm">
-         <h3 className="text-[14px] font-black tracking-[0.3em] text-amber-500 uppercase mb-2 border-b border-white/10 pb-3">{t('controls')}</h3>
+      {/* Control Summary */}
+      <div className="absolute bottom-12 right-12 z-30 hidden lg:flex flex-col gap-6 p-10 bg-black/60 backdrop-blur-3xl border border-white/5 rounded-[3rem] animate-in fade-in slide-in-from-right-12 duration-1000 delay-500 shadow-[0_30px_60px_rgba(0,0,0,0.8)] max-w-sm">
+         <h3 className="text-[18px] font-black tracking-[0.2em] text-amber-500 uppercase mb-4 border-b border-white/5 pb-5">{t('controls')}</h3>
          
-         <div className="space-y-5">
+         <div className="space-y-8">
             <div>
-              <span className="text-[12px] font-black text-white/40 uppercase tracking-[0.1em] block mb-3">{t('keyboard')}</span>
-              <div className="grid grid-cols-2 gap-y-3">
-                <div className="flex items-center gap-4">
-                   <kbd className="px-3 py-1.5 bg-white/10 rounded-lg text-[12px] font-black border border-white/10 min-w-[44px] text-center shadow-md">WASD</kbd>
-                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('move')}</span>
+              <span className="text-[13px] font-black text-white/30 uppercase tracking-[0.2em] block mb-5">{t('keyboard')}</span>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+                <div className="flex items-center gap-5">
+                   <kbd className="px-4 py-3 bg-[#1c1917] rounded-xl text-[13px] font-black border border-white/10 min-w-[64px] text-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.05)] text-white/80">WASD</kbd>
+                   <span className="text-[13px] font-black text-white/50 uppercase tracking-tight">{t('move')}</span>
                 </div>
-                <div className="flex items-center gap-4">
-                   <kbd className="px-3 py-1.5 bg-white/10 rounded-lg text-[12px] font-black border border-white/10 min-w-[44px] text-center shadow-md">E</kbd>
-                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('interact')}</span>
+                <div className="flex items-center gap-5">
+                   <kbd className="px-4 py-3 bg-[#1c1917] rounded-xl text-[13px] font-black border border-white/10 min-w-[50px] text-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.05)] text-white/80">E</kbd>
+                   <span className="text-[13px] font-black text-white/50 uppercase tracking-tight">{t('interact')}</span>
                 </div>
-                <div className="flex items-center gap-4">
-                   <kbd className="px-3 py-1.5 bg-white/10 rounded-lg text-[12px] font-black border border-white/10 min-w-[44px] text-center shadow-md">F</kbd>
-                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('inventory')}</span>
+                <div className="flex items-center gap-5">
+                   <kbd className="px-4 py-3 bg-[#1c1917] rounded-xl text-[13px] font-black border border-white/10 min-w-[50px] text-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.05)] text-white/80">F</kbd>
+                   <span className="text-[13px] font-black text-white/50 uppercase tracking-tight">{t('inventory')}</span>
                 </div>
-                <div className="flex items-center gap-4">
-                   <kbd className="px-3 py-1.5 bg-white/10 rounded-lg text-[12px] font-black border border-white/10 min-w-[44px] text-center shadow-md">C</kbd>
-                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('crafting')}</span>
+                <div className="flex items-center gap-5">
+                   <kbd className="px-4 py-3 bg-[#1c1917] rounded-xl text-[13px] font-black border border-white/10 min-w-[50px] text-center shadow-[inset_0_2px_4_rgba(255,255,255,0.05)] text-white/80">C</kbd>
+                   <span className="text-[13px] font-black text-white/50 uppercase tracking-tight">{t('crafting')}</span>
                 </div>
               </div>
             </div>
 
             <div>
-              <span className="text-[12px] font-black text-white/40 uppercase tracking-[0.1em] block mb-3">{t('mouse')}</span>
-              <div className="grid grid-cols-2 gap-y-3">
-                <div className="flex items-center gap-4">
-                   <div className="w-10 h-6 bg-white/10 rounded-lg border border-white/10 flex items-center justify-center"><div className="w-2 h-3 bg-amber-500 rounded-full mr-4" /></div>
-                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('move')}</span>
+              <span className="text-[13px] font-black text-white/30 uppercase tracking-[0.2em] block mb-5">{t('mouse')}</span>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+                <div className="flex items-center gap-5">
+                   <div className="w-16 h-8 bg-[#1c1917] rounded-full border border-white/10 flex items-center justify-start p-1 relative shadow-inner">
+                      <div className="w-4 h-full bg-amber-500 rounded-full" />
+                   </div>
+                   <span className="text-[13px] font-black text-white/50 uppercase tracking-tight">{t('move')}</span>
                 </div>
-                <div className="flex items-center gap-4">
-                   <div className="w-10 h-6 bg-white/10 rounded-lg border border-white/10 flex items-center justify-center"><div className="w-2 h-3 bg-blue-400 rounded-full ml-4" /></div>
-                   <span className="text-[12px] font-bold text-white/60 uppercase tracking-tight">{t('pan')}</span>
+                <div className="flex items-center gap-5">
+                   <div className="w-16 h-8 bg-[#1c1917] rounded-full border border-white/10 flex items-center justify-end p-1 relative shadow-inner">
+                      <div className="w-4 h-full bg-blue-400 rounded-full" />
+                   </div>
+                   <span className="text-[13px] font-black text-white/50 uppercase tracking-tight">{t('pan')}</span>
                 </div>
               </div>
             </div>
@@ -100,9 +102,9 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
                 <button 
                   onClick={() => { SoundManager.playUI('click'); onContinue(); }}
                   onMouseEnter={() => SoundManager.playUI('hover')}
-                  className="group relative overflow-hidden py-6 bg-amber-600 rounded-2xl font-black text-white text-2xl tracking-tighter uppercase transition-all hover:scale-105 active:scale-95 shadow-2xl border border-white/20"
+                  className="group relative overflow-hidden py-6 bg-amber-700/80 backdrop-blur-sm rounded-2xl font-black text-white text-2xl tracking-tighter uppercase transition-all hover:scale-105 active:scale-95 shadow-2xl border border-white/10"
                 >
-                  <div className="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-0 transition-transform duration-500 ease-out" />
+                  <div className="absolute inset-0 bg-white/5 translate-x-full group-hover:translate-x-0 transition-transform duration-500 ease-out" />
                   <span className="relative z-10">{t('continue')}</span>
                 </button>
               )}
@@ -126,7 +128,7 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
             </div>
           </>
         ) : (
-          <div className="w-full bg-stone-900/50 backdrop-blur-3xl p-10 rounded-[3rem] border border-white/20 animate-in zoom-in-95 duration-500 shadow-2xl">
+          <div className="w-full bg-stone-900/50 backdrop-blur-3xl p-10 rounded-[3rem] border border-white/20 animate-in zoom-in-95 duration-500 shadow-2xl overflow-y-auto max-h-[85vh] custom-scrollbar">
              <h2 className="text-4xl font-black mb-10 tracking-tighter text-amber-500 uppercase">{t('settings')}</h2>
              <div className="space-y-8">
                 <div className="flex flex-col gap-4">
@@ -154,9 +156,18 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
                 <div className="flex flex-col gap-4">
                    <span className="text-[12px] font-black tracking-[0.2em] text-white/40 uppercase">{t('outfit')}</span>
                    <div className="flex gap-6 items-center">
-                      <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-2xl" style={{ backgroundColor: playerStats.character.outfitColor }} />
+                      <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-2xl flex-shrink-0" style={{ backgroundColor: playerStats.character.outfitColor }} />
                       <input type="color" value={playerStats.character.outfitColor} onChange={e => onUpdatePlayerStats({...playerStats, character: {...playerStats.character, outfitColor: e.target.value}})} className="flex-1 h-14 bg-transparent cursor-pointer rounded-2xl overflow-hidden border border-white/10 shadow-inner" />
                    </div>
+                </div>
+                <div className="flex flex-col gap-4">
+                   <span className="text-[12px] font-black tracking-[0.2em] text-white/40 uppercase">{t('sound')}</span>
+                   <button 
+                    onClick={() => onUpdateSettings({...settings, soundEnabled: !settings.soundEnabled})}
+                    className={`py-4 rounded-xl font-black text-[12px] uppercase border transition-all shadow-md ${settings.soundEnabled ? 'bg-emerald-500 text-white border-emerald-400' : 'bg-red-500/20 border-red-500/40 text-red-500'}`}
+                   >
+                     {settings.soundEnabled ? 'ON' : 'OFF'}
+                   </button>
                 </div>
              </div>
              <button onClick={() => setShowSettings(false)} className="w-full py-5 mt-12 bg-white text-stone-950 font-black rounded-2xl uppercase tracking-[0.2em] text-[12px] hover:bg-amber-500 transition-all shadow-2xl active:scale-95">{t('back')}</button>
@@ -167,15 +178,18 @@ export const MainMenu: React.FC<Props> = ({ onStart, onContinue, hasActiveSessio
       <style>{`
         @keyframes float-ember {
           0% { transform: translateY(0) rotate(0); opacity: 0; }
-          20% { opacity: 1; }
-          100% { transform: translateY(-200px) rotate(360deg); opacity: 0; }
+          10% { opacity: 0.8; }
+          90% { opacity: 0.8; }
+          100% { transform: translateY(-600px) rotate(360deg); opacity: 0; }
         }
         .animate-float-ember {
-          animation: float-ember 12s linear infinite;
+          animation: float-ember 50s linear infinite; /* Extremely slow */
         }
         .text-glow {
           text-shadow: 0 0 30px rgba(245, 158, 11, 0.6);
         }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
       `}</style>
     </div>
   );

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { PlayerStats, Language } from '../types';
 import { TRANSLATIONS } from '../constants';

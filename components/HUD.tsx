@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { PlayerStats, GameState, Language, Item } from '../types';
 import { TRANSLATIONS } from '../constants';
@@ -8,21 +7,64 @@ interface Props {
   time: number;
   message: string;
   gameState: GameState;
-  onAction: (action: 'use' | 'reorder' | 'equip', data: any) => void;
-  onZoom: (delta: number) => void;
+  onAction: (action: 'use' | 'reorder' | 'equip' | 'place' | 'repair_all', data: any) => void;
+  onZoom: (delta: number) => void; 
   onRotate: (delta: number) => void;
   onOpenSettings: () => void;
+  usableItemsForQuickSlots: Item[]; // New prop: items already filtered for quick slots
 }
 
-export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction, onZoom, onRotate, onOpenSettings }) => {
+export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction, onZoom, onRotate, onOpenSettings, usableItemsForQuickSlots }) => {
   const hours = Math.floor((time / 2400) * 24);
   const minutes = Math.floor(((time / 2400) * 24 * 60) % 60);
   const t = (key: string) => TRANSLATIONS[gameState.settings.language][key] || key;
 
-  const getUniqueItems = (types: string[]) => {
-    const items = gameState.inventory.filter(i => types.includes(i.type));
-    const uniqueMap = new Map<string, { item: Item, total: number, hasOverflow: boolean, maxStack: number }>();
+  // This logic is now handled in App.tsx and passed down via usableItemsForQuickSlots
+  // const getUniqueItems = (types: string[]) => {
+  //   const items = gameState.inventory.filter(i => types.includes(i.type));
+  //   const uniqueMap = new Map<string, { item: Item, total: number, hasOverflow: boolean, maxStack: number }>();
     
+  //   items.forEach(i => {
+  //     const existing = uniqueMap.get(i.id);
+  //     if (!existing) {
+  //       uniqueMap.set(i.id, { 
+  //         item: i, 
+  //         total: i.quantity, 
+  //         hasOverflow: false,
+  //         maxStack: i.maxStack || 99
+  //       });
+  //     } else {
+  //       const updatedTotal = (existing.total || 0) + i.quantity;
+  //       uniqueMap.set(i.id, { 
+  //         ...existing, 
+  //         total: updatedTotal, 
+  //         hasOverflow: updatedTotal > (existing.maxStack || 99) 
+  //       });
+  //     }
+  //   });
+  //   return Array.from(uniqueMap.values());
+  // };
+
+  // const usableItems = getUniqueItems(['tool', 'weapon', 'food']);
+  const resources = getUniqueItems(gameState.inventory, ['resource', 'material']); // Keep resource logic here for now
+
+  const weatherIcons: Record<string, string> = {
+    clear: '☀️',
+    rain: '🌧️',
+    fog: '🌫️',
+    snow: '❄️'
+  };
+
+  const formatQuantity = (total: number, maxStack: number) => {
+    if (total > 99) return '99+';
+    if (total > 50 && maxStack <= 50) return '50+';
+    return total.toString();
+  };
+
+  // Helper function for resources (local to HUD for now)
+  function getUniqueItems(inventory: Item[], types: string[]) {
+    const items = inventory.filter(i => types.includes(i.type));
+    const uniqueMap = new Map<string, { item: Item, total: number, hasOverflow: boolean, maxStack: number }>();
     items.forEach(i => {
       const existing = uniqueMap.get(i.id);
       if (!existing) {
@@ -42,23 +84,7 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
       }
     });
     return Array.from(uniqueMap.values());
-  };
-
-  const usableItems = getUniqueItems(['tool', 'weapon', 'food']);
-  const resources = getUniqueItems(['resource', 'material']);
-
-  const weatherIcons: Record<string, string> = {
-    clear: '☀️',
-    rain: '🌧️',
-    fog: '🌫️',
-    snow: '❄️'
-  };
-
-  const formatQuantity = (total: number, maxStack: number) => {
-    if (total > 99) return '99+';
-    if (total > 50 && maxStack <= 50) return '50+';
-    return total.toString();
-  };
+  }
 
   const StatBar = ({ label, value, max, color, icon, critical }: any) => {
     const percentage = (value / max) * 100;
@@ -127,7 +153,7 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
       <div className="fixed right-4 sm:right-6 top-1/2 -translate-y-1/2 flex flex-col items-center pointer-events-auto">
         <div className="p-3 sm:p-4 bg-black/30 backdrop-blur-2xl border border-white/20 rounded-[2.5rem] flex flex-col gap-3 shadow-2xl max-h-[60vh] overflow-hidden">
           <span className="text-[9px] sm:text-[12px] font-black text-white/40 uppercase tracking-[0.2em] text-center mb-1">{t('stock')}</span>
-          <div className="flex flex-col gap-2.5 overflow-y-auto pr-1.5 custom-scrollbar">
+          <div className="flex flex-col gap-2.5 overflow-y-auto pr-1.5 no-scrollbar">
             {resources.length > 0 ? resources.map(({item, total, maxStack}) => (
               <div key={item.id} className="relative w-12 h-12 sm:w-14 sm:h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center group hover:bg-white/15 transition-all shadow-lg">
                 <span className="text-2xl sm:text-3xl group-hover:scale-110 transition-transform">{item.icon}</span>
@@ -154,29 +180,33 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
       <div className="flex flex-col items-center w-full gap-3 pointer-events-auto mb-4" onMouseDown={e => e.stopPropagation()}>
         <div className="flex gap-1.5 sm:gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/20 rounded-full shadow-2xl overflow-x-auto max-w-[95vw] no-scrollbar">
           {[...Array(9)].map((_, i) => {
-            const data = usableItems[i];
-            const item = data?.item;
+            const item = usableItemsForQuickSlots[i]; // Use the passed prop
             const isEquipped = item && item.id === stats.equippedItemId;
+
+            // Find the full item data from inventory to get quantity and durability
+            const itemInInventory = item ? gameState.inventory.find(invItem => invItem.id === item.id) : null;
+            const displayItem = itemInInventory || item; // Use the one from inventory if found, otherwise the `usableItemsForQuickSlots` item
+
             return (
               <div 
                 key={i} 
-                onClick={() => item && onAction('use', item)}
+                onClick={() => displayItem && onAction('use', displayItem)}
                 className={`relative flex-shrink-0 w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${isEquipped ? 'bg-amber-500/80 border-amber-300 shadow-[0_0_30px_rgba(245,158,11,0.5)] scale-110 z-10' : 'bg-white/5 border-white/10 hover:bg-white/15 hover:border-white/20'}`}
               >
                 <span className={`absolute -top-1 -left-1 w-5 h-5 sm:w-6 sm:h-6 rounded-full text-[8px] sm:text-[10px] flex items-center justify-center font-black shadow-lg ${isEquipped ? 'bg-white text-stone-950' : 'bg-stone-800 border border-white/10 text-white/60'}`}>
                   {i + 1}
                 </span>
-                {item ? (
+                {displayItem ? (
                   <>
-                    <span className="text-xl sm:text-2xl drop-shadow-md">{item.icon}</span>
-                    {(data.total > 1 || data.hasOverflow) && (
+                    <span className="text-xl sm:text-2xl drop-shadow-md">{displayItem.icon}</span>
+                    {(displayItem.quantity > 1) && ( // Check quantity from displayItem
                       <span className="absolute -bottom-1 -right-1 bg-amber-400 text-stone-900 w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-[8px] sm:text-[10px] font-black rounded-full border border-stone-900 shadow-md leading-none">
-                        {formatQuantity(data.total, data.maxStack)}
+                        {formatQuantity(displayItem.quantity, displayItem.maxStack || 99)}
                       </span>
                     )}
-                    {item.durability !== undefined && (
+                    {displayItem.durability !== undefined && (
                       <div className="absolute bottom-2 left-3 right-3 h-1 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                        <div className={`h-full transition-all duration-300 ${isEquipped ? 'bg-white' : 'bg-emerald-400'}`} style={{ width: `${(item.durability / (item.maxDurability || 1)) * 100}%` }} />
+                        <div className={`h-full transition-all duration-300 ${isEquipped ? 'bg-white' : 'bg-emerald-400'}`} style={{ width: `${(displayItem.durability / (displayItem.maxDurability || 1)) * 100}%` }} />
                       </div>
                     )}
                   </>

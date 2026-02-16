@@ -1,423 +1,215 @@
 
-import React, { useRef, useEffect, useMemo } from 'react';
-import { GameState, FacingDirection, Entity } from '../types';
-import { TILE_WIDTH, TILE_HEIGHT, WORLD_SIZE, ITEMS } from '../constants';
-import { getTileType } from '../App';
+import React, { useRef, useEffect, useState } from 'react';
+import { GameState, TileType, Entity, EntityType, FloatingText } from '../types';
+import { TILE_WIDTH, TILE_HEIGHT, CHUNK_SIZE } from '../constants';
+
+const ASSETS_SVG: Record<string, string> = {
+  axe_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="40" width="10" height="60" rx="5" fill="#78350f"/><path d="M45 20 L75 10 L75 50 L45 40 Z" fill="#94a3b8"/><path d="M45 20 L25 10 L25 50 L45 40 Z" fill="#64748b"/></svg>`,
+  pickaxe_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="40" width="10" height="60" rx="5" fill="#78350f"/><path d="M10 30 Q50 10 90 30 L90 45 Q50 25 10 45 Z" fill="#94a3b8"/></svg>`,
+  sword_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="70" width="10" height="30" rx="2" fill="#451a03"/><rect x="25" y="70" width="50" height="8" rx="2" fill="#d97706"/><path d="M40 10 L60 10 L65 70 L35 70 Z" fill="#cbd5e1"/><path d="M50 5 L60 10 L40 10 Z" fill="#94a3b8"/></svg>`,
+  tree_oak: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="80" width="10" height="30" fill="#451a03"/><circle cx="50" cy="50" r="40" fill="#15803d"/><circle cx="30" cy="60" r="25" fill="#166534"/><circle cx="70" cy="60" r="25" fill="#166534"/><circle cx="50" cy="30" r="25" fill="#14532d"/></svg>`,
+  tree_pine: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="90" width="10" height="20" fill="#451a03"/><path d="M50 10 L10 100 L90 100 Z" fill="#064e3b"/><path d="M50 30 L20 90 L80 90 Z" fill="#065f46"/><path d="M50 50 L30 80 L70 80 Z" fill="#047857"/></svg>`,
+  rock_standard: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M10 90 L30 30 L70 20 L90 80 Z" fill="#a1a1aa"/><path d="M30 30 L50 60 L70 20 Z" fill="#71717a"/><path d="M10 90 L30 30 L50 60 Z" fill="#d4d4d8"/></svg>`,
+  bush_berry: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="#166534"/><circle cx="30" cy="40" r="8" fill="#1d4ed8"/><circle cx="70" cy="35" r="8" fill="#1d4ed8"/><circle cx="45" cy="70" r="8" fill="#1d4ed8"/></svg>`,
+  deer: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><ellipse cx="50" cy="60" rx="30" ry="20" fill="#92400e"/><circle cx="70" cy="40" r="15" fill="#92400e"/><rect x="65" y="10" width="4" height="20" fill="#451a03"/><rect x="35" y="75" width="6" height="15" fill="#451a03"/></svg>`,
+  rabbit: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><ellipse cx="50" cy="70" rx="20" ry="15" fill="#e5e5e5"/><circle cx="65" cy="60" r="10" fill="#e5e5e5"/><rect x="62" y="35" width="4" height="25" rx="2" fill="#e5e5e5"/><rect x="68" y="35" width="4" height="25" rx="2" fill="#e5e5e5"/></svg>`,
+  workbench: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="40" width="80" height="15" fill="#78350f"/><rect x="20" y="55" width="10" height="35" fill="#451a03"/><rect x="70" y="55" width="10" height="35" fill="#451a03"/></svg>`,
+  well: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="60" width="60" height="30" rx="5" fill="#57534e"/><circle cx="50" cy="70" r="20" fill="#1d4ed8"/></svg>`,
+  tent: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 10 L10 90 L90 90 Z" fill="#d97706"/><path d="M50 10 L40 90 L60 90 Z" fill="#451a03"/></svg>`,
+  campfire: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="80" r="40" fill="rgba(0,0,0,0.1)"/><rect x="20" y="70" width="60" height="10" rx="5" fill="#451a03" transform="rotate(15 50 75)"/><rect x="20" y="70" width="60" height="10" rx="5" fill="#451a03" transform="rotate(-15 50 75)"/><circle cx="50" cy="45" r="25" fill="#ef4444"/><circle cx="50" cy="50" r="15" fill="#f59e0b"/></svg>`,
+  chest: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="15" y="40" width="70" height="50" rx="5" fill="#78350f"/><rect x="45" y="48" width="10" height="10" fill="#f59e0b"/></svg>`,
+  farm_plot_0: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="80" height="70" rx="10" fill="#573315"/></svg>`,
+  farm_plot_3: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="80" height="70" rx="10" fill="#573315"/><circle cx="30" cy="25" r="8" fill="#1d4ed8"/></svg>`,
+  arrow: `<svg viewBox="0 0 100 10" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="4" width="80" height="2" fill="#78350f"/><path d="M80 0 L100 5 L80 10 Z" fill="#cbd5e1"/></svg>`
+};
+
+const ENTITY_ASSET_MAP: Record<EntityType, string> = {
+  tree_oak: 'tree_oak', tree_pine: 'tree_pine', tree_palm: 'tree_oak', rock_standard: 'rock_standard', rock_iron: 'rock_standard',
+  bush_berry: 'bush_berry', bush_flower: 'bush_berry', bush_dry: 'rock_standard', well: 'well', player: 'player', deer: 'deer', rabbit: 'rabbit',
+  campfire: 'campfire', tent: 'tent', workbench: 'workbench', hut: 'tent', chest: 'chest', loot_bag: 'chest', farm_plot: 'farm_plot_0',
+  scorpion: 'deer', bear: 'deer', crab: 'deer', bridge: 'workbench', road: 'rock_standard', stone_wall: 'rock_standard', watchtower: 'well',
+  castle_gate: 'well', flower: 'bush_berry', iron_ore: 'rock_standard', axe_tool: 'axe_tool', pickaxe_tool: 'pickaxe_tool', sword_tool: 'sword_tool'
+};
 
 interface Props {
-  gameState: GameState & { 
-    birds: {x: number, y: number, vx: number, vy: number, flap: number}[],
-    ripples: {id: string, x: number, y: number, startTime: number}[],
-    particles: {id: string, x: number, y: number, vx: number, vy: number, life: number, color: string, size: number, type?: string}[],
-    shake: number,
-    isRecentlyAttackedByAnimal: boolean
-  };
-  gameStateRef: React.RefObject<any>;
-  mouseTargetRef: React.RefObject<{ x: number, y: number } | null>;
+  gameState: GameState;
+  canvasRef: React.RefObject<HTMLCanvasElement>;
+  placingEntityType: EntityType | null;
 }
 
-export const GameCanvas: React.FC<Props> = ({ gameStateRef, mouseTargetRef }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  
-  const stars = useMemo(() => {
-    return [...Array(120)].map(() => ({
-      x: Math.random(),
-      y: Math.random(),
-      size: Math.random() * 2 + 0.5,
-      twinkleSpeed: Math.random() * 0.05 + 0.01,
-      phase: Math.random() * Math.PI * 2
-    }));
-  }, []);
-
-  const weatherParticles = useMemo(() => {
-    return [...Array(60)].map(() => ({ 
-      x: Math.random(),
-      y: Math.random(),
-      v: 1 + Math.random() * 2,
-      drift: (Math.random() - 0.5) * 0.5,
-      size: 1 + Math.random() * 2
-    }));
-  }, []);
-
-  const getTransformedCoords = (wx: number, wy: number, rotation: number) => {
-    if (rotation === 90) return { tx: wy, ty: WORLD_SIZE - 1 - wx };
-    if (rotation === 180) return { tx: WORLD_SIZE - 1 - wx, ty: WORLD_SIZE - 1 - wy };
-    if (rotation === 270) return { tx: WORLD_SIZE - 1 - wy, ty: wx };
-    return { tx: wx, ty: wy };
-  };
-
-  const toScreen = (x: number, y: number, zoom: number, rotation: number) => {
-    const { tx, ty } = getTransformedCoords(x, y, rotation);
-    const tw = TILE_WIDTH * zoom;
-    const th = TILE_HEIGHT * zoom;
-    return { x: tx * tw, y: ty * th };
-  };
-
-  const drawWeather = (ctx: CanvasRenderingContext2D, type: string, intensity: number, now: number, width: number, height: number) => {
-    if (intensity <= 0) return;
-    ctx.save();
-    ctx.globalAlpha = intensity;
-    
-    if (type === 'rain') {
-      ctx.strokeStyle = 'rgba(150, 180, 255, 0.4)';
-      ctx.lineWidth = 1;
-      weatherParticles.forEach(p => {
-        const py = ((p.y + (now / 200) * p.v) % 1) * height;
-        const px = ((p.x + (now / 1000) * p.drift) % 1) * width;
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(px + p.drift * 20, py + 20);
-        ctx.stroke();
-      });
-    } else if (type === 'snow') {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      weatherParticles.forEach(p => {
-        const py = ((p.y + (now / 1000) * p.v) % 1) * height;
-        const px = ((p.x + (now / 2000) * Math.sin(now / 500 + p.x * 10)) % 1) * width;
-        ctx.beginPath();
-        ctx.arc(px, py, p.size, 0, Math.PI * 2);
-        ctx.fill();
-      });
-    } else if (type === 'fog') {
-      const fogGrad = ctx.createLinearGradient(0, 0, width, height);
-      fogGrad.addColorStop(0, `rgba(200, 200, 210, ${0.4 * intensity})`);
-      fogGrad.addColorStop(0.5, `rgba(180, 180, 190, ${0.2 * intensity})`);
-      fogGrad.addColorStop(1, `rgba(200, 200, 210, ${0.4 * intensity})`);
-      ctx.fillStyle = fogGrad;
-      ctx.fillRect(0, 0, width, height);
-    }
-    ctx.restore();
-  };
-
-  const drawPlayer = (ctx: CanvasRenderingContext2D, x: number, y: number, zoom: number, stats: any, now: number) => {
-    const isWalking = stats.isWalking;
-    const facing: FacingDirection = stats.facing;
-    const gender = stats.character.gender;
-    const outfitColor = stats.character.outfitColor || '#451a03';
-    const skinColor = '#fde68a';
-    const hairColor = '#27272a';
-    const equippedItemId = stats.equippedItemId;
-    const lastInteract = stats.lastInteractTime || 0;
-    const isInteracting = (now - lastInteract) < 400;
-
-    const swing = isWalking ? Math.sin(now / 100) * 0.4 : 0;
-    const bob = isWalking ? Math.abs(Math.sin(now / 100)) * 2 * zoom : 0;
-
-    ctx.save();
-    ctx.translate(x, y - bob);
-
-    const currentBodyColor = outfitColor;
-    
-    ctx.fillStyle = currentBodyColor;
-    if (gender === 'male') {
-      ctx.beginPath();
-      ctx.roundRect(-12 * zoom, -20 * zoom, 24 * zoom, 28 * zoom, 4 * zoom);
-      ctx.fill();
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(-10 * zoom, -20 * zoom);
-      ctx.lineTo(10 * zoom, -20 * zoom);
-      ctx.lineTo(12 * zoom, 8 * zoom);
-      ctx.lineTo(-12 * zoom, 8 * zoom);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    const drawArm = (side: number, angle: number, hasTool: boolean) => {
-      ctx.save();
-      ctx.translate(side * 12 * zoom, -16 * zoom);
-      const interactProgress = isInteracting && hasTool ? Math.min(1, (now - lastInteract) / 400) : 0;
-      const interactSwing = interactProgress > 0 ? Math.sin(interactProgress * Math.PI) * 1.8 : 0;
-      ctx.rotate(angle + interactSwing);
-      ctx.fillStyle = currentBodyColor;
-      ctx.fillRect(-3 * zoom, 0, 6 * zoom, 16 * zoom);
-      ctx.fillStyle = skinColor;
-      ctx.beginPath(); ctx.arc(0, 16 * zoom, 4 * zoom, 0, Math.PI * 2); ctx.fill();
-
-      if (hasTool && equippedItemId) {
-        const item = ITEMS[equippedItemId];
-        if (item) {
-          ctx.save();
-          ctx.translate(0, 18 * zoom);
-          ctx.rotate(-Math.PI / 2 + interactSwing * 0.5);
-          ctx.font = `${28 * zoom}px serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(item.icon, 0, 0);
-          ctx.restore();
-        }
-      }
-      ctx.restore();
-    };
-
-    drawArm(-1, swing, false);
-    drawArm(1, -swing, equippedItemId !== null);
-    ctx.fillStyle = skinColor; ctx.beginPath(); ctx.arc(0, -28 * zoom, 10 * zoom, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = hairColor; ctx.beginPath(); ctx.arc(0, -32 * zoom, 11 * zoom, Math.PI, 0); ctx.fill();
-    if (gender === 'female') { ctx.beginPath(); const ponytailSwing = isWalking ? Math.sin(now / 200) * 5 * zoom : 0; ctx.arc(-8 * zoom + ponytailSwing, -25 * zoom, 6 * zoom, 0, Math.PI * 2); ctx.fill(); }
-    const showFace = facing === 'se' || facing === 'sw';
-    if (showFace) { ctx.fillStyle = '#000'; const eyeOffset = facing === 'se' ? 2 * zoom : -2 * zoom; ctx.beginPath(); ctx.arc(eyeOffset - 3 * zoom, -28 * zoom, 1.5 * zoom, 0, Math.PI * 2); ctx.arc(eyeOffset + 3 * zoom, -28 * zoom, 1.5 * zoom, 0, Math.PI * 2); ctx.fill(); }
-    ctx.restore();
-  };
-
-  const drawSky = (ctx: CanvasRenderingContext2D, time: number, now: number, width: number, height: number) => {
-    const isNight = time < 500 || time > 1900;
-    if (!isNight) return;
-    let nightOpacity = 0;
-    if (time < 500) nightOpacity = 1 - (time / 500);
-    else if (time > 1900) nightOpacity = (time - 1900) / 500;
-    ctx.save();
-    ctx.globalAlpha = nightOpacity;
-    stars.forEach(s => {
-      const twinkle = Math.sin(now * s.twinkleSpeed + s.phase) * 0.5 + 0.5;
-      ctx.fillStyle = `rgba(255, 255, 255, ${twinkle})`;
-      ctx.beginPath(); ctx.arc(s.x * width, s.y * height, s.size, 0, Math.PI * 2); ctx.fill();
-    });
-    ctx.restore();
-  };
+export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntityType }) => {
+  const [images, setImages] = useState<Record<string, HTMLImageElement>>({});
+  const [assetsLoaded, setAssetsLoaded] = useState(false);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d', { alpha: false });
-    if (!ctx) return;
-    let frameId: number;
-    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
-    window.addEventListener('resize', resize); resize();
+    const loadedImages: Record<string, HTMLImageElement> = {};
+    let loadedCount = 0;
+    const totalAssets = Object.keys(ASSETS_SVG).length;
+    Object.entries(ASSETS_SVG).forEach(([key, svg]) => {
+      const img = new Image();
+      const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+      img.onload = () => { loadedCount++; if (loadedCount === totalAssets) setAssetsLoaded(true); };
+      img.src = url; loadedImages[key] = img;
+    });
+    setImages(loadedImages);
+  }, []);
 
+  useEffect(() => {
+    if (!assetsLoaded) return;
+    let animationFrameId: number;
     const render = () => {
-      const state = gameStateRef.current;
-      if (!state) { frameId = requestAnimationFrame(render); return; }
-      const now = performance.now();
-      const time = state.time;
-      const zoom = state.viewConfig.zoom;
-      const rotation = state.viewConfig.rotation;
-      const cameraOffsetX = state.viewConfig.cameraOffsetX;
-      const cameraOffsetY = state.viewConfig.cameraOffsetY;
-      const weather = state.weather;
+      const canvas = canvasRef.current, ctx = canvas?.getContext('2d');
+      if (!canvas || !ctx) return;
+      const engine = gameState, { zoom, cameraOffsetX, cameraOffsetY } = engine.viewConfig;
+      if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const centerX = canvas.width / 2, centerY = canvas.height / 2;
+      const playerScreenX = engine.playerPos.x * TILE_WIDTH * zoom, playerScreenY = engine.playerPos.y * TILE_HEIGHT * zoom;
+      ctx.save(); ctx.translate(centerX - playerScreenX + cameraOffsetX, centerY - playerScreenY + cameraOffsetY);
 
-      const cycle = time / 2400; 
-      let bgColor = '#166534';
-      let overlayAlpha = 0;
-      let overlayColor = '0, 0, 0';
+      const vX = Math.ceil(canvas.width / (TILE_WIDTH * zoom)) + 2, vY = Math.ceil(canvas.height / (TILE_HEIGHT * zoom)) + 2;
+      const sX = Math.floor(engine.playerPos.x - vX / 2), eX = sX + vX, sY = Math.floor(engine.playerPos.y - vY / 2), eY = sY + vY;
 
-      if (cycle < 0.2 || cycle > 0.85) { bgColor = '#020617'; overlayAlpha = 0.65; overlayColor = '0, 0, 10'; }
-      else if (cycle >= 0.2 && cycle < 0.35) { const p = (cycle - 0.2) / 0.15; bgColor = '#2d1b0d'; overlayAlpha = 0.65 * (1 - p); overlayColor = '251, 146, 60'; }
-      else if (cycle >= 0.35 && cycle < 0.7) { bgColor = '#166534'; overlayAlpha = 0; }
-      else if (cycle >= 0.7 && cycle < 0.85) { const p = (cycle - 0.7) / 0.15; bgColor = '#1e1b4b'; overlayAlpha = 0.65 * p; overlayColor = '107, 33, 168'; }
-
-      if (weather.type === 'rain') { overlayAlpha = Math.max(overlayAlpha, 0.3 * weather.intensity); overlayColor = '30, 40, 60'; }
-      if (weather.type === 'fog') { overlayAlpha = Math.max(overlayAlpha, 0.5 * weather.intensity); overlayColor = '150, 150, 160'; }
-      if (weather.type === 'snow') { overlayAlpha = Math.max(overlayAlpha, 0.2 * weather.intensity); overlayColor = '200, 220, 255'; }
-
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      drawSky(ctx, time, now, canvas.width, canvas.height);
-
-      const pS = toScreen(state.playerPos.x, state.playerPos.y, zoom, rotation);
-      
-      ctx.save();
-      ctx.translate(
-        canvas.width / 2 - (pS.x + (TILE_WIDTH * zoom) / 2) + cameraOffsetX, 
-        canvas.height / 2 - (pS.y + (TILE_HEIGHT * zoom) / 2) + cameraOffsetY
-      );
-
-      const renderRange = 16 / zoom; 
-      const startX = Math.max(0, Math.floor(state.playerPos.x - renderRange));
-      const endX = Math.min(WORLD_SIZE, Math.ceil(state.playerPos.x + renderRange));
-      const startY = Math.max(0, Math.floor(state.playerPos.y - renderRange));
-      const endY = Math.min(WORLD_SIZE, Math.ceil(state.playerPos.y + renderRange));
-
-      for (let x = startX; x < endX; x++) {
-        for (let y = startY; y < endY; y++) {
-          const s = toScreen(x, y, zoom, rotation);
-          const tile = getTileType(x, y, state.playerStats.level);
-          let color = '#166534';
-          if (tile === 'sand') color = '#ca8a04';
-          else if (tile === 'water') color = '#1e3a8a';
-          
-          if (weather.type === 'snow') {
-            color = tile === 'water' ? '#3b82f6' : '#e2e8f0';
-          }
-          
-          ctx.fillStyle = color;
-          ctx.fillRect(s.x, s.y, TILE_WIDTH * zoom + 0.5, TILE_HEIGHT * zoom + 0.5);
-        }
+      for (let x = sX; x <= eX; x++) for (let y = sY; y <= eY; y++) {
+          const cx = Math.floor(x / CHUNK_SIZE), cy = Math.floor(y / CHUNK_SIZE);
+          const chunk = engine.chunks[`${cx},${cy}`];
+          if (chunk) drawTile(ctx, chunk[((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE][((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE], x, y, zoom);
       }
 
-      // Draw Destination Marker (Mouse Click Target)
-      if (mouseTargetRef.current) {
-        const targetPos = mouseTargetRef.current;
-        const s = toScreen(targetPos.x, targetPos.y, zoom, rotation);
-        const centerX = s.x + (TILE_WIDTH * zoom) / 2;
-        const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
-        const pulse = Math.abs(Math.sin(now / 300));
-        
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate(Math.PI / 4);
-        ctx.strokeStyle = `rgba(245, 158, 11, ${0.4 + pulse * 0.6})`;
-        ctx.lineWidth = 3 * zoom;
-        ctx.strokeRect(-10 * zoom * (1 + pulse * 0.2), -10 * zoom * (1 + pulse * 0.2), 20 * zoom * (1 + pulse * 0.2), 20 * zoom * (1 + pulse * 0.2));
-        
-        ctx.fillStyle = `rgba(245, 158, 11, ${0.2 + pulse * 0.3})`;
-        ctx.fillRect(-6 * zoom, -6 * zoom, 12 * zoom, 12 * zoom);
-        ctx.restore();
-      }
+      const sortedEntities = [...engine.entities].sort((a, b) => a.y - b.y);
+      sortedEntities.forEach(ent => { if (ent.y < engine.playerPos.y) drawEntity(ctx, ent, zoom, engine.hoveredEntityId === ent.id); });
+      drawPlayer(ctx, engine, zoom);
+      sortedEntities.forEach(ent => { if (ent.y >= engine.playerPos.y) drawEntity(ctx, ent, zoom, engine.hoveredEntityId === ent.id); });
 
-      // Draw Ripples
-      state.ripples?.forEach((r: any) => {
-        const s = toScreen(r.x, r.y, zoom, rotation);
-        const centerX = s.x + (TILE_WIDTH * zoom) / 2;
-        const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
-        const elapsed = now - r.startTime;
-        const progress = Math.min(1, elapsed / 1000);
-        
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, (10 + progress * 50) * zoom, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.4 * (1 - progress)})`;
-        ctx.lineWidth = 2 * zoom;
-        ctx.stroke();
-        
-        // Second inner ripple
-        if (progress > 0.3) {
-           const p2 = (progress - 0.3) / 0.7;
-           ctx.beginPath();
-           ctx.arc(centerX, centerY, (5 + p2 * 30) * zoom, 0, Math.PI * 2);
-           ctx.strokeStyle = `rgba(255, 255, 255, ${0.2 * (1 - p2)})`;
-           ctx.stroke();
-        }
-        ctx.restore();
-      });
-
-      state.particles?.forEach((p: any) => {
-        const s = toScreen(p.x, p.y, zoom, rotation);
-        const centerX = s.x + (TILE_WIDTH * zoom) / 2;
-        const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
-        const isSmoke = p.type === 'smoke';
-        
-        ctx.save();
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = isSmoke ? Math.min(0.5, p.life * 0.4) : Math.min(1, p.life * 1.5);
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, p.size * zoom, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      });
-
-      state.projectiles?.forEach((proj: any) => {
-        const s = toScreen(proj.x, proj.y, zoom, rotation);
-        const centerX = s.x + (TILE_WIDTH * zoom) / 2;
-        const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
-        
-        const angle = Math.atan2(proj.vy, proj.vx);
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate(angle);
-        
-        ctx.beginPath();
-        ctx.moveTo(-15 * zoom, 0);
-        ctx.lineTo(15 * zoom, 0);
-        ctx.strokeStyle = '#5d4037'; 
-        ctx.lineWidth = 2.5 * zoom;
-        ctx.lineCap = 'round';
-        ctx.stroke();
-        
-        ctx.beginPath();
-        ctx.moveTo(15 * zoom, 0);
-        ctx.lineTo(10 * zoom, -4 * zoom);
-        ctx.lineTo(10 * zoom, 4 * zoom);
-        ctx.closePath();
-        ctx.fillStyle = '#b0bec5'; 
-        ctx.fill();
-        
-        ctx.beginPath();
-        ctx.moveTo(-15 * zoom, 0);
-        ctx.lineTo(-20 * zoom, -5 * zoom);
-        ctx.lineTo(-12 * zoom, 0);
-        ctx.lineTo(-20 * zoom, 5 * zoom);
-        ctx.closePath();
-        ctx.fillStyle = '#cfd8dc';
-        ctx.fill();
-        
-        ctx.restore();
-      });
-
-      const entitiesToDraw = [...state.entities, { id: 'p', type: 'player', x: state.playerPos.x, y: state.playerPos.y, health: state.playerStats.health } as any]
-        .filter(ent => Math.abs(ent.x - state.playerPos.x) < renderRange + 2 && Math.abs(ent.y - state.playerPos.y) < renderRange + 2)
-        .sort((a,b) => a.y - b.y);
-
-      entitiesToDraw.forEach(ent => {
-        const s = toScreen(ent.x, ent.y, zoom, rotation);
-        const centerX = s.x + (TILE_WIDTH * zoom) / 2;
-        const centerY = s.y + (TILE_HEIGHT * zoom) / 2;
-        ctx.save();
-        
-        const isBuilding = ['tent', 'hut', 'workbench', 'watchtower', 'castle_gate'].includes(ent.type);
-        const isStatic = isBuilding || ['tree_oak', 'tree_pine', 'tree_palm', 'rock_standard', 'rock_iron', 'bush_berry', 'bush_flower', 'bush_dry', 'well', 'campfire', 'road', 'bridge', 'stone_wall'].includes(ent.type);
-        
-        ctx.fillStyle = 'rgba(0,0,0,0.6)'; 
-        let shadowW = isStatic ? 8 * zoom : 14 * zoom;
-        let shadowH = isStatic ? 4 * zoom : 7 * zoom;
-        if (isBuilding) { shadowW *= 1.8; shadowH *= 1.8; }
-        ctx.beginPath(); ctx.ellipse(centerX, centerY + 18 * zoom, shadowW, shadowH, 0, 0, Math.PI * 2); ctx.fill();
-        
-        if (ent.type === 'player') {
-          drawPlayer(ctx, centerX, centerY, zoom, state.playerStats, now);
-        } else {
-          const icons: any = { tree_oak: '🌳', tree_pine: '🌲', tree_palm: '🌴', rock_standard: '🪨', rock_iron: '⛓️', bush_berry: '🌿', bush_flower: '🌺', bush_dry: '🌾', deer: '🦌', rabbit: '🐇', bear: '🐻', scorpion: '🦂', crab: '🦀', campfire: '🔥', tent: '⛺', workbench: '⚒️', hut: '🏠', watchtower: '🏰' };
-          const bounce = ['deer', 'rabbit', 'bear', 'scorpion', 'crab'].includes(ent.type) ? Math.abs(Math.sin(now / 150)) * 2 * zoom : 0;
-          let entityFontSize = 42;
-          if (ent.type === 'tent') entityFontSize = 64;
-          if (ent.type === 'hut') entityFontSize = 80;
-          if (ent.type === 'watchtower') entityFontSize = 90;
-          if (ent.type === 'workbench') entityFontSize = 54;
-          
+      // Projectiles
+      engine.projectiles.forEach(p => {
+          const img = images[p.type]; if (!img) return;
           ctx.save();
-          ctx.translate(centerX, centerY + 10 * zoom - bounce);
-          
-          ctx.globalAlpha = 1.0; 
-          
-          ctx.font = `${entityFontSize * zoom}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-          ctx.fillText(icons[ent.type] || '❓', 0, 0);
-          
-          if (ent.health < ent.maxHealth) {
-             const barW = 32 * zoom; const barH = 5 * zoom;
-             ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(-barW/2, 6*zoom, barW, barH);
-             ctx.fillStyle = '#22c55e'; ctx.fillRect(-barW/2, 6*zoom, barW * (ent.health / ent.maxHealth), barH);
-          }
+          ctx.translate(p.x * TILE_WIDTH * zoom, p.y * TILE_HEIGHT * zoom);
+          ctx.rotate(Math.atan2(p.vy, p.vx));
+          ctx.drawImage(img, -20*zoom, -2.5*zoom, 40*zoom, 5*zoom);
           ctx.restore();
-        }
-        ctx.restore();
       });
+
+      // Ghost Placement
+      if (placingEntityType) {
+          ctx.globalAlpha = 0.5;
+          const facing = engine.playerStats.facing;
+          let ox = 0, oy = 0;
+          if (facing === 'nw') { ox = -1.2; oy = -1.2; } else if (facing === 'ne') { ox = 1.2; oy = -1.2; } else if (facing === 'sw') { ox = -1.2; oy = 1.2; } else { ox = 1.2; oy = 1.2; }
+          drawEntity(ctx, { id: 'ghost', x: engine.playerPos.x + ox, y: engine.playerPos.y + oy, type: placingEntityType, health: 100, maxHealth: 100 }, zoom, false);
+          ctx.globalAlpha = 1;
+      }
+
+      engine.particles.forEach(p => { 
+        ctx.fillStyle = p.color; 
+        ctx.globalAlpha = p.life / p.maxLife; 
+        ctx.beginPath(); 
+        ctx.arc(p.x * TILE_WIDTH * zoom, p.y * TILE_HEIGHT * zoom, p.size * zoom, 0, Math.PI * 2); 
+        ctx.fill(); 
+        ctx.globalAlpha = 1; 
+      });
+
+      engine.floatingTexts.forEach(ft => { 
+        ctx.fillStyle = ft.color; 
+        ctx.globalAlpha = ft.life; 
+        ctx.font = `bold ${14 * zoom}px Inter`; 
+        ctx.textAlign = 'center'; 
+        ctx.fillText(ft.text, ft.x * TILE_WIDTH * zoom, (ft.y - 0.5) * TILE_HEIGHT * zoom); 
+        ctx.globalAlpha = 1; 
+      });
+
       ctx.restore();
-
-      if (overlayAlpha > 0) {
-        ctx.save();
-        const screenCenterX = canvas.width / 2 + cameraOffsetX;
-        const screenCenterY = canvas.height / 2 + cameraOffsetY;
-        const nightGrad = ctx.createRadialGradient(screenCenterX, screenCenterY, 120 * zoom, screenCenterX, screenCenterY, 450 * zoom);
-        nightGrad.addColorStop(0, `rgba(${overlayColor}, 0)`); nightGrad.addColorStop(1, `rgba(${overlayColor}, ${overlayAlpha})`);
-        ctx.fillStyle = nightGrad; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.restore();
-      }
-
-      drawWeather(ctx, weather.type, weather.intensity, now, canvas.width, canvas.height);
-
-      const timeSinceCombatHit = now - (state.playerStats.lastCombatDamageTime || 0);
-      if (timeSinceCombatHit < 500) {
-        const pulse = 0.5 * (1 - timeSinceCombatHit / 500);
-        const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.width/4, canvas.width/2, canvas.height/2, canvas.width);
-        grad.addColorStop(0, 'rgba(0,0,0,0)'); grad.addColorStop(1, `rgba(153, 27, 27, ${pulse})`);
-        ctx.fillStyle = grad; ctx.fillRect(0,0, canvas.width, canvas.height);
-      }
-
-      frameId = requestAnimationFrame(render);
+      animationFrameId = requestAnimationFrame(render);
     };
-    render();
-    return () => { window.removeEventListener('resize', resize); cancelAnimationFrame(frameId); };
-  }, [stars, weatherParticles]); 
+    render(); return () => cancelAnimationFrame(animationFrameId);
+  }, [gameState, canvasRef, assetsLoaded, images, placingEntityType]);
 
-  return <canvas ref={canvasRef} className="block w-full h-full" />;
+  const drawTile = (ctx: CanvasRenderingContext2D, tile: TileType, x: number, y: number, zoom: number) => {
+      const px = x * TILE_WIDTH * zoom, py = y * TILE_HEIGHT * zoom, size = TILE_WIDTH * zoom;
+      ctx.fillStyle = tile === 'water' ? '#1d4ed8' : tile === 'sand' ? '#fbbf24' : tile === 'stone' ? '#57534e' : tile === 'snow_tile' ? '#f8fafc' : '#15803d';
+      ctx.fillRect(px, py, size + 1, size + 1);
+  };
+
+  const drawEntity = (ctx: CanvasRenderingContext2D, ent: Entity, zoom: number, isHovered: boolean) => {
+    let assetKey = ENTITY_ASSET_MAP[ent.type];
+    if (ent.type === 'farm_plot' && ent.growthStage !== undefined) assetKey = `farm_plot_${ent.growthStage}`;
+    const img = images[assetKey]; if (!img) return;
+    const x = ent.x * TILE_WIDTH * zoom, y = ent.y * TILE_HEIGHT * zoom, size = TILE_WIDTH * 1.5 * zoom;
+    
+    const isAnimal = ent.type === 'deer' || ent.type === 'rabbit';
+    const isRoaming = isAnimal && ent.aiState === 'grazing';
+    const bounce = isRoaming ? Math.abs(Math.sin(performance.now() / 200)) * 5 * zoom : 0;
+
+    ctx.save(); 
+    ctx.translate(x + (TILE_WIDTH * zoom) / 2, y + TILE_HEIGHT * zoom - bounce);
+    
+    if (isHovered) { ctx.shadowBlur = 10 * zoom; ctx.shadowColor = 'white'; }
+    if (ent.facing === 'right') { ctx.scale(-1, 1); }
+
+    ctx.drawImage(img, -size / 2, -size, size, size);
+    ctx.restore();
+  };
+
+  const drawPlayer = (ctx: CanvasRenderingContext2D, engine: GameState, zoom: number) => {
+    const px = engine.playerPos.x * TILE_WIDTH * zoom, py = engine.playerPos.y * TILE_HEIGHT * zoom, size = TILE_WIDTH * 1.2 * zoom;
+    const isWalking = engine.playerStats.isWalking, time = performance.now() / 150;
+    const bounce = isWalking ? Math.abs(Math.sin(time)) * 4 * zoom : 0;
+    const config = engine.playerStats.character;
+
+    ctx.save();
+    ctx.translate(px + (TILE_WIDTH * zoom) / 2, py + TILE_HEIGHT * zoom);
+
+    // Legs
+    ctx.fillStyle = '#1c1917';
+    ctx.fillRect(-size*0.15, -size*0.2 + (isWalking ? Math.sin(time)*size*0.05 : 0), size*0.1, size*0.2); // Left leg
+    ctx.fillRect(size*0.05, -size*0.2 + (isWalking ? Math.sin(time + Math.PI)*size*0.05 : 0), size*0.1, size*0.2); // Right leg
+
+    // Body
+    ctx.fillStyle = config.outfitColor;
+    ctx.beginPath();
+    ctx.roundRect(-size*0.25, -size*0.65 - bounce, size*0.5, size*0.5, size*0.1);
+    ctx.fill();
+
+    // Arms
+    ctx.fillStyle = '#fde68a'; // Skin
+    const armSwing = isWalking ? Math.sin(time) * 15 : 0;
+    // Left Arm
+    ctx.save(); ctx.translate(-size*0.3, -size*0.55 - bounce); ctx.rotate(-armSwing * Math.PI / 180); ctx.fillRect(-size*0.05, 0, size*0.1, size*0.25); ctx.restore();
+    // Right Arm (Weapon/Tool Hand)
+    ctx.save(); ctx.translate(size*0.3, -size*0.55 - bounce); ctx.rotate(armSwing * Math.PI / 180); 
+    const interaction = engine.playerStats.interactionAnim > 0 ? (1 - engine.playerStats.interactionAnim / 0.3) * Math.PI : 0;
+    ctx.rotate(-interaction);
+    ctx.fillRect(-size*0.05, 0, size*0.1, size*0.25); 
+
+    // Equipped Item
+    const eqId = engine.playerStats.equippedItemId;
+    if (eqId) {
+        let toolKey = eqId === 'axe' ? 'axe_tool' : eqId === 'pickaxe' ? 'pickaxe_tool' : eqId.includes('sword') ? 'sword_tool' : eqId === 'bow' ? 'bow' : '';
+        const tImg = images[toolKey];
+        if (tImg) ctx.drawImage(tImg, -size*0.1, size*0.1, size*0.5, size*0.5);
+    }
+    ctx.restore();
+
+    // Head
+    ctx.fillStyle = '#fde68a';
+    ctx.beginPath();
+    ctx.arc(0, -size*0.8 - bounce, size*0.18, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#000';
+    const eyeOffset = engine.playerStats.facing.includes('e') ? 2 : -2;
+    ctx.beginPath(); ctx.arc(eyeOffset * zoom, -size*0.82 - bounce, size*0.02, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc((eyeOffset + 6) * zoom, -size*0.82 - bounce, size*0.02, 0, Math.PI*2); ctx.fill();
+
+    // Hair/Hat
+    ctx.fillStyle = '#1c1917';
+    ctx.beginPath(); ctx.arc(0, -size*0.88 - bounce, size*0.18, Math.PI, Math.PI*2); ctx.fill();
+
+    ctx.restore();
+  };
+
+  return <canvas ref={canvasRef} />;
 };

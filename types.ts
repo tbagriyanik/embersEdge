@@ -1,7 +1,7 @@
 
 export type ResourceType = 'wood' | 'stone' | 'berry' | 'water' | 'meat' | 'iron';
 export type WeatherType = 'clear' | 'rain' | 'fog' | 'snow';
-export type TileType = 'grass' | 'sand' | 'water' | 'snow_tile' | 'desert_tile';
+export type TileType = 'grass' | 'sand' | 'water' | 'snow_tile' | 'desert_tile' | 'stone';
 export type FacingDirection = 'se' | 'sw' | 'ne' | 'nw';
 export type Language = 'en' | 'tr';
 export type Gender = 'male' | 'female';
@@ -9,7 +9,7 @@ export type Gender = 'male' | 'female';
 export interface WeatherState {
   type: WeatherType;
   intensity: number;
-  transition: number;
+  transitionTimer: number;
 }
 
 export interface Item {
@@ -23,6 +23,7 @@ export interface Item {
   maxStack?: number;
   durability?: number;
   maxDurability?: number;
+  placeEntity?: EntityType;
   effect?: {
     hunger?: number;
     thirst?: number;
@@ -45,8 +46,10 @@ export type EntityType =
   | 'tree_oak' | 'tree_pine' | 'tree_palm' 
   | 'rock_standard' | 'rock_iron' 
   | 'bush_berry' | 'bush_flower' | 'bush_dry'
-  | 'well' | 'player' | 'deer' | 'rabbit' | 'campfire' | 'tent' | 'workbench' | 'hut' | 'scorpion' | 'bear' | 'crab'
-  | 'bridge' | 'road' | 'stone_wall' | 'watchtower' | 'castle_gate';
+  | 'well' | 'player' | 'deer' | 'rabbit' | 'campfire' | 'tent' | 'workbench' | 'hut' | 'chest' | 'loot_bag' | 'farm_plot'
+  | 'scorpion' | 'bear' | 'crab'
+  | 'bridge' | 'road' | 'stone_wall' | 'watchtower' | 'castle_gate'
+  | 'flower' | 'iron_ore' | 'axe_tool' | 'pickaxe_tool' | 'sword_tool';
 
 export interface Entity {
   id: string;
@@ -60,9 +63,14 @@ export interface Entity {
   targetY?: number;
   isFleeing?: boolean;
   spawnTime?: number;
-  aiState?: 'idle' | 'grazing' | 'fleeing' | 'prowling' | 'hunting' | 'attacking';
+  aiState?: 'idle' | 'grazing' | 'fleeing' | 'chasing' | 'attacking';
   lastAiTick?: number;
   attackCooldown?: number;
+  damage?: number;
+  storage?: Item[];
+  growthStage?: number;
+  growthTimer?: number;
+  facing?: 'left' | 'right';
 }
 
 export interface Projectile {
@@ -74,7 +82,32 @@ export interface Projectile {
   damage: number;
   ownerId: string;
   life: number;
-  trail?: { x: number; y: number }[];
+  type: 'arrow'; 
+}
+
+export interface FloatingText {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number;
+  vy: number;
+}
+
+export interface Particle {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  color: string;
+  type: 'dust' | 'blood' | 'spark' | 'leaf' | 'rain_splash' | 'wood' | 'stone' | 'dirt' | 'ripple' | 'smoke';
+  rotation?: number;
+  rotSpeed?: number;
 }
 
 export interface CharacterConfig {
@@ -99,7 +132,8 @@ export interface PlayerStats {
   isWalking: boolean;
   lastInteractTime: number;
   lastDamageTime: number;
-  lastCombatDamageTime: number; // New: Tracks only physical attack hits
+  lastCombatDamageTime: number;
+  interactionAnim: number;
 }
 
 export interface GameSettings {
@@ -113,9 +147,12 @@ export interface GameState {
   inventory: Item[];
   entities: Entity[];
   projectiles: Projectile[];
+  floatingTexts: FloatingText[];
+  particles: Particle[];
   time: number;
   isDay: boolean;
   gameStarted: boolean;
+  isPaused: boolean;
   weather: WeatherState;
   settings: GameSettings;
   viewConfig: {
@@ -124,4 +161,19 @@ export interface GameState {
     cameraOffsetX: number;
     cameraOffsetY: number;
   };
+  chunks: Record<string, TileType[][]>;
+  hoveredEntityId: string | null;
+}
+
+export interface InputManagerCallbacks {
+  onOpenInventory: () => void;
+  onOpenCrafting: () => void;
+  onOpenSettings: () => void;
+  onInteract: (entityId: string | null) => void;
+  onGather: (entityId: string) => void;
+  onPanCamera: (dx: number, dy: number) => void;
+  onZoom: (delta: number) => void;
+  onClickToMove: (worldX: number, worldY: number) => void;
+  onQuickSlotActivated: (slotIndex: number) => void;
+  onEscape: () => void;
 }
