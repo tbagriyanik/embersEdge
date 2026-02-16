@@ -7,7 +7,6 @@ import { GameCanvas } from './components/GameCanvas';
 import { MobileControls } from './components/MobileControls';
 import { Inventory } from './components/Inventory';
 import { Crafting } from './components/Crafting';
-import { Container } from './components/Container';
 import { MainMenu } from './components/MainMenu';
 import { DeathScreen } from './components/DeathScreen';
 import { Minimap } from './components/Minimap';
@@ -23,8 +22,6 @@ export const calculateTileType = (x: number, y: number): TileType => {
   if (val > 1.2) return 'stone';
   return 'grass';
 };
-
-const FARM_GROWTH_TIME = 60; // seconds per stage
 
 const App: React.FC = () => {
   const [gameStarted, setGameStarted] = useState(false);
@@ -103,9 +100,7 @@ const App: React.FC = () => {
     if (stats.xp >= threshold) {
       stats.level++;
       stats.xp -= threshold;
-      stats.health = 100;
-      stats.hunger = 100;
-      stats.thirst = 100;
+      stats.health = 100; stats.hunger = 100; stats.thirst = 100;
       const t = (key: string) => TRANSLATIONS[gameState.current.settings.language][key] || key;
       showMessage(t('level_up'));
       addFloatingText(gameState.current.playerPos.x, gameState.current.playerPos.y, t('level_up'), '#fbbf24');
@@ -116,25 +111,16 @@ const App: React.FC = () => {
 
   const getUsableItemsForQuickSlots = useCallback((inventory: Item[]): Item[] => {
     const itemsInInventory = inventory.filter(i => ['tool', 'weapon', 'food', 'structure'].includes(i.type));
-    const uniqueMap = new Map<string, { item: Item, total: number, hasOverflow: boolean, maxStack: number }>();
+    const uniqueMap = new Map<string, Item>();
     itemsInInventory.forEach(i => {
-        const existing = uniqueMap.get(i.id);
-        if (!existing) {
-            uniqueMap.set(i.id, { item: i, total: i.quantity, hasOverflow: false, maxStack: i.maxStack || 99 });
-        } else {
-            const updatedTotal = (existing.total || 0) + i.quantity;
-            uniqueMap.set(i.id, { ...existing, total: updatedTotal, hasOverflow: updatedTotal > (existing.maxStack || 99) });
-        }
+      if (!uniqueMap.has(i.id)) uniqueMap.set(i.id, i);
     });
-    return Array.from(uniqueMap.values()).map(data => data.item);
+    return Array.from(uniqueMap.values());
   }, []);
 
   const addFloatingText = (x: number, y: number, text: string, color: string) => {
     gameState.current.floatingTexts.push({
-      id: Math.random().toString(),
-      x, y, text, color,
-      life: 1.5,
-      vy: -0.5
+      id: Math.random().toString(), x, y, text, color, life: 1.5, vy: -0.5
     });
   };
 
@@ -143,10 +129,10 @@ const App: React.FC = () => {
       gameState.current.particles.push({
         id: Math.random(),
         x, y,
-        vx: (Math.random() - 0.5) * (type === 'smoke' ? 1 : 5),
-        vy: type === 'smoke' ? -1 - Math.random() : (Math.random() - 0.5) * 5,
-        life: type === 'smoke' ? 2.0 : 1.0,
-        maxLife: type === 'smoke' ? 2.0 : 1.0,
+        vx: (Math.random() - 0.5) * (type === 'smoke' ? 0.3 : 5),
+        vy: type === 'smoke' ? -1 - Math.random() * 0.5 : (Math.random() - 0.5) * 5,
+        life: type === 'smoke' ? 2.5 : 1.0,
+        maxLife: type === 'smoke' ? 2.5 : 1.0,
         size: (Math.random() * 0.5 + 0.2) * sizeScale,
         color,
         type
@@ -176,43 +162,21 @@ const App: React.FC = () => {
             engine.playerStats.equippedItemId = engine.playerStats.equippedItemId === data.id ? null : data.id;
             SoundManager.playUI('equip');
         } else if (data.type === 'structure' || data.placeEntity) {
-            setPlacingEntityType(data.placeEntity);
-            setActiveModal('none');
+            const facing = engine.playerStats.facing;
+            let ox = 0, oy = 0;
+            if (facing === 'nw') { ox = -1.2; oy = -1.2; } else if (facing === 'ne') { ox = 1.2; oy = -1.2; } else if (facing === 'sw') { ox = -1.2; oy = 1.2; } else { ox = 1.2; oy = 1.2; }
+            handleAction('place', { x: engine.playerPos.x + ox, y: engine.playerPos.y + oy, type: data.placeEntity });
         }
-    } else if (action === 'reorder') {
-        const { fromIdx, toIdx } = data;
-        if (fromIdx !== undefined && toIdx !== undefined && fromIdx !== toIdx) {
-            const inv = [...engine.inventory];
-            const temp = inv[fromIdx];
-            inv[fromIdx] = inv[toIdx];
-            inv[toIdx] = temp;
-            engine.inventory = inv;
-            SoundManager.playUI('hover');
-        }
-    } else if (action === 'equip') {
-        engine.playerStats.equippedItemId = data.id;
-        SoundManager.playUI('equip');
     } else if (action === 'fire') {
         const arrowIdx = engine.inventory.findIndex(i => i.id === 'arrow');
         if (arrowIdx > -1) {
             engine.inventory[arrowIdx].quantity--;
             if (engine.inventory[arrowIdx].quantity <= 0) engine.inventory.splice(arrowIdx, 1);
-            
-            const dx = data.tx - engine.playerPos.x;
-            const dy = data.ty - engine.playerPos.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            const speed = 25;
-            
+            const dx = data.tx - engine.playerPos.x, dy = data.ty - engine.playerPos.y;
+            const dist = Math.sqrt(dx*dx + dy*dy), speed = 25;
             engine.projectiles.push({
-                id: Math.random().toString(),
-                x: engine.playerPos.x,
-                y: engine.playerPos.y,
-                vx: (dx / dist) * speed,
-                vy: (dy / dist) * speed,
-                damage: 15,
-                ownerId: 'player',
-                life: 3,
-                type: 'arrow'
+                id: Math.random().toString(), x: engine.playerPos.x, y: engine.playerPos.y,
+                vx: (dx / dist) * speed, vy: (dy / dist) * speed, damage: 15, ownerId: 'player', life: 3, type: 'arrow'
             });
             SoundManager.playToolAction('bow');
             engine.playerStats.interactionAnim = 0.2;
@@ -220,28 +184,16 @@ const App: React.FC = () => {
             showMessage(t('out_of_arrows'));
         }
     } else if (action === 'place') {
-        const { x, y } = data;
-        const newEntity: Entity = {
-            id: Math.random().toString(),
-            x, y,
-            type: placingEntityType!,
-            health: 100, maxHealth: 100
-        };
-        engine.entities.push(newEntity);
+        const { x, y, type } = data;
+        engine.entities.push({ id: Math.random().toString(), x, y, type: type, health: 100, maxHealth: 100 });
         SoundManager.play('build');
-        showMessage(t('placed') + " " + t(placingEntityType!));
-        setPlacingEntityType(null);
+        showMessage(t('placed') + " " + t(type));
     } else if (action === 'repair_all') {
-        engine.inventory.forEach(item => {
-            if (item.durability !== undefined && item.maxDurability !== undefined) {
-                item.durability = item.maxDurability;
-            }
-        });
-        SoundManager.play('build');
-        showMessage("All items repaired!");
+        engine.inventory.forEach(item => { if (item.durability !== undefined && item.maxDurability !== undefined) item.durability = item.maxDurability; });
+        SoundManager.play('build'); showMessage("All items repaired!");
     }
     setUiState(prev => prev + 1);
-  }, [placingEntityType]);
+  }, []);
 
   const handleQuickSlotActivated = useCallback((slotIndex: number) => {
     const usableItems = getUsableItemsForQuickSlots(gameState.current.inventory);
@@ -261,86 +213,48 @@ const App: React.FC = () => {
     const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
     engine.playerStats.interactionAnim = 0.3;
 
-    if (placingEntityType) {
-        const facing = engine.playerStats.facing;
-        let ox = 0, oy = 0;
-        if (facing === 'nw') { ox = -1.2; oy = -1.2; }
-        else if (facing === 'ne') { ox = 1.2; oy = -1.2; }
-        else if (facing === 'sw') { ox = -1.2; oy = 1.2; }
-        else { ox = 1.2; oy = 1.2; }
-        handleAction('place', { x: engine.playerPos.x + ox, y: engine.playerPos.y + oy });
-        return;
-    }
-
     if (entityId) {
       const entity = engine.entities.find(e => e.id === entityId);
-      if (entity) {
-        if (entity.type === 'workbench') setActiveModal('crafting');
-        else if (entity.type === 'well') {
-          showMessage(t(`drink_water`));
-          engine.playerStats.thirst = Math.min(100, engine.playerStats.thirst + 40);
-          addFloatingText(engine.playerPos.x, engine.playerPos.y, `Refreshed!`, '#60a5fa');
-          SoundManager.play('eat');
-          setUiState(prev => prev + 1);
-        } else if (entity.type === 'tent') {
-          showMessage(t('rest_tent'));
-          engine.playerStats.health = Math.min(100, engine.playerStats.health + 25);
-          engine.playerStats.stamina = 100;
-          addFloatingText(engine.playerPos.x, engine.playerPos.y, `Zzz... +25 HP`, '#a855f7');
-          SoundManager.play('eat');
-          setUiState(prev => prev + 1);
-        } else if (entity.type === 'campfire') {
-          const inventory = engine.inventory;
-          const rawMeat = inventory.find(i => i.id === 'meat_raw');
-          const berries = inventory.find(i => i.id === 'berry');
-          let cookedItem: Item | null = null, consumedItem: Item | null = null;
-          if (rawMeat) { consumedItem = rawMeat; cookedItem = { ...ITEMS.meat_cooked, quantity: 1 }; }
-          else if (berries) { consumedItem = berries; cookedItem = { ...ITEMS.berry_cooked, quantity: 1 }; }
+      if (!entity) return;
+      if (entity.type === 'workbench') setActiveModal('crafting');
+      else if (entity.type === 'well') {
+        showMessage(t(`drink_water`));
+        engine.playerStats.thirst = Math.min(100, engine.playerStats.thirst + 40);
+        addFloatingText(engine.playerPos.x, engine.playerPos.y, `Refreshed!`, '#60a5fa');
+        SoundManager.play('eat');
+        setUiState(prev => prev + 1);
+      } else if (entity.type === 'tent') {
+        showMessage(t('rest_tent'));
+        engine.playerStats.health = Math.min(100, engine.playerStats.health + 25);
+        engine.playerStats.stamina = 100;
+        addFloatingText(engine.playerPos.x, engine.playerPos.y, `Zzz... +25 HP`, '#a855f7');
+        SoundManager.play('eat');
+        setUiState(prev => prev + 1);
+      } else if (entity.type === 'campfire') {
+        const inventory = engine.inventory;
+        const rawMeat = inventory.find(i => i.id === 'meat_raw');
+        const berries = inventory.find(i => i.id === 'berry');
+        let cookedItem: Item | null = null, consumedItem: Item | null = null;
+        if (rawMeat) { consumedItem = rawMeat; cookedItem = { ...ITEMS.meat_cooked, quantity: 1 }; }
+        else if (berries) { consumedItem = berries; cookedItem = { ...ITEMS.berry_cooked, quantity: 1 }; }
 
-          if (consumedItem && cookedItem) {
-            consumedItem.quantity--;
-            if (consumedItem.quantity <= 0) inventory.splice(inventory.indexOf(consumedItem), 1);
-            const existing = inventory.find(i => i.id === cookedItem!.id && i.quantity < (i.maxStack || 99));
-            if (existing) existing.quantity++;
-            else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push(cookedItem);
-            showMessage(t('crafted') + " " + t(cookedItem.id));
-            addFloatingText(entity.x, entity.y, t(cookedItem.id), '#fbbf24');
-            SoundManager.play('craft');
-            spawnParticles(entity.x, entity.y, 'spark', 8, '#f59e0b', 1.2);
-            engine.playerStats.xp += 10;
-            checkLevelUp(engine.playerStats);
-          } else { showMessage(t('need_raw_food')); }
-          setUiState(prev => prev + 1);
-        } else if (entity.type === 'farm_plot') {
-          if (entity.growthStage === 0 || entity.growthStage === undefined) {
-             const seedItem = engine.inventory.find(i => i.id === 'seed_berry');
-             if (seedItem) {
-               entity.growthStage = 1; entity.growthTimer = 0;
-               seedItem.quantity--;
-               if (seedItem.quantity <= 0) engine.inventory.splice(engine.inventory.indexOf(seedItem), 1);
-               showMessage(t('planted'));
-               addFloatingText(entity.x, entity.y, t('planted'), '#4ade80');
-               SoundManager.play('build');
-               spawnParticles(entity.x, entity.y, 'leaf', 5, '#15803d');
-             } else showMessage(t('need_seed_berry'));
-          } else if (entity.growthStage === 3) {
-             const berry = { ...ITEMS.berry, quantity: 3 };
-             const existing = engine.inventory.find(i => i.id === 'berry' && i.quantity < (i.maxStack || 99));
-             if (existing) existing.quantity += 3;
-             else if (engine.inventory.length < MAX_INVENTORY_SLOTS) engine.inventory.push(berry);
-             entity.growthStage = 0; entity.growthTimer = 0;
-             showMessage(t('harvested'));
-             addFloatingText(entity.x, entity.y, `+3 Berries`, '#4ade80');
-             SoundManager.play('gather');
-             spawnParticles(entity.x, entity.y, 'leaf', 8, '#1d4ed8');
-             engine.playerStats.xp += 15;
-             checkLevelUp(engine.playerStats);
-          }
-        }
+        if (consumedItem && cookedItem) {
+          consumedItem.quantity--;
+          if (consumedItem.quantity <= 0) inventory.splice(inventory.indexOf(consumedItem), 1);
+          const existing = inventory.find(i => i.id === cookedItem!.id && i.quantity < (i.maxStack || 99));
+          if (existing) existing.quantity++;
+          else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push(cookedItem);
+          showMessage(t('crafted') + " " + t(cookedItem.id));
+          addFloatingText(entity.x, entity.y, t(cookedItem.id), '#fbbf24');
+          SoundManager.play('craft');
+          spawnParticles(entity.x, entity.y, 'spark', 8, '#f59e0b', 1.2);
+          engine.playerStats.xp += 10; checkLevelUp(engine.playerStats);
+        } else showMessage(t('need_raw_food'));
+        setUiState(prev => prev + 1);
       }
     } else {
         const playerPos = engine.playerPos;
-        const neighbors = [{x:0, y:0}, {x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
+        const neighbors = [{x:0, y:0}, {x:0.5, y:0}, {x:-0.5, y:0}, {x:0, y:0.5}, {x:0, y:-0.5}];
         const isNearWater = neighbors.some(n => getTileAt(playerPos.x + n.x, playerPos.y + n.y) === 'water');
         if (isNearWater && engine.playerStats.thirst < 95) {
           showMessage(t(`drink_water`));
@@ -350,7 +264,7 @@ const App: React.FC = () => {
           setUiState(prev => prev + 1);
         }
     }
-  }, [getTileAt, checkLevelUp, placingEntityType, handleAction]);
+  }, [getTileAt, checkLevelUp, handleAction]);
 
   const handleGather = useCallback((entityId: string) => {
     const engine = gameState.current;
@@ -368,13 +282,12 @@ const App: React.FC = () => {
     if (equippedToolType === 'tool' || equippedToolType === 'weapon') {
         damage = GATHER_BASE_DAMAGE;
         if (preferredTools.includes(equippedTool?.id || '')) damage *= GATHER_TOOL_BOOST;
-        else if (equippedTool?.id === 'axe' || equippedTool?.id === 'pickaxe') damage *= GATHER_TOOL_BOOST;
-    } else showMessage(t('bare_hands'));
+    }
     targetEntity.health -= damage;
     SoundManager.playGather(targetEntity.type, playerStats.equippedItemId);
     const gatherInfo = GATHER_ITEM_QUANTITY[targetEntity.type as keyof typeof GATHER_ITEM_QUANTITY];
     if (gatherInfo) {
-      spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo.particle as Particle['type'], 3, targetEntity.type.includes('tree') ? '#a16207' : (targetEntity.type === 'deer' || targetEntity.type === 'rabbit' ? '#ef4444' : '#fbbf24'), 0.6);
+      spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo.particle as Particle['type'], 3, targetEntity.type.includes('tree') ? '#a16207' : '#fbbf24', 0.6);
       addFloatingText(targetEntity.x, targetEntity.y, `+${gatherInfo.quantity} ${t(gatherInfo.item)}`, '#fbbf24');
     }
     if (targetEntity.health > 0 && gatherInfo) {
@@ -384,11 +297,7 @@ const App: React.FC = () => {
         else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push(itemToAdd);
         else showMessage(t('inv_full'));
     }
-    let xpGain = GATHER_XP_PER_HIT;
-    if (targetEntity.type === 'deer') xpGain = 25;
-    if (targetEntity.type === 'rabbit') xpGain = 10;
-    playerStats.xp += xpGain;
-    checkLevelUp(playerStats);
+    playerStats.xp += GATHER_XP_PER_HIT; checkLevelUp(playerStats);
     if (equippedTool && equippedTool.durability !== undefined) {
       equippedTool.durability = Math.max(0, equippedTool.durability - 10);
       if (equippedTool.durability <= 0) { showMessage(t('tool_broken')); playerStats.equippedItemId = null; }
@@ -402,13 +311,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const savedSettings = localStorage.getItem(SETTINGS_SAVE_KEY);
-    if (savedSettings) try { 
-      gameState.current.settings = JSON.parse(savedSettings); 
-    } catch (e) {}
+    if (savedSettings) try { gameState.current.settings = JSON.parse(savedSettings); } catch (e) {}
     const savedChar = localStorage.getItem('embers_character_config');
-    if (savedChar) try { 
-      gameState.current.playerStats.character = JSON.parse(savedChar); 
-    } catch (e) {}
+    if (savedChar) try { gameState.current.playerStats.character = JSON.parse(savedChar); } catch (e) {}
     setHasSave(!!localStorage.getItem(SAVE_KEY));
     window.addEventListener('click', () => SoundManager.init(), { once: true });
     
@@ -419,37 +324,17 @@ const App: React.FC = () => {
         onOpenSettings: () => setActiveModal('settings'),
         onInteract: handleInteract,
         onGather: handleGather,
-        onPanCamera: (dx, dy) => {
-          gameState.current.viewConfig.cameraOffsetX += dx;
-          gameState.current.viewConfig.cameraOffsetY += dy;
-        },
+        onPanCamera: (dx, dy) => { gameState.current.viewConfig.cameraOffsetX += dx; gameState.current.viewConfig.cameraOffsetY += dy; },
         onZoom: (delta) => {
-          const zoomFactor = 0.1;
-          if (delta < 0) gameState.current.viewConfig.zoom = Math.min(2, gameState.current.viewConfig.zoom + zoomFactor);
-          else gameState.current.viewConfig.zoom = Math.max(0.5, gameState.current.viewConfig.zoom - zoomFactor);
+          if (delta < 0) gameState.current.viewConfig.zoom = Math.min(2, gameState.current.viewConfig.zoom + 0.1);
+          else gameState.current.viewConfig.zoom = Math.max(0.5, gameState.current.viewConfig.zoom - 0.1);
         },
         onClickToMove: (worldX, worldY) => {
-          const engine = gameState.current;
-          if (engine.playerStats.equippedItemId === 'bow') {
-             handleAction('fire', { tx: worldX, ty: worldY });
-             return;
-          }
-          if (placingEntityType) {
-              handleAction('place', { x: worldX, y: worldY });
-              return;
-          }
+          if (gameState.current.playerStats.equippedItemId === 'bow') { handleAction('fire', { tx: worldX, ty: worldY }); return; }
           inputManagerRef.current?.setPlayerTargetPos({ x: worldX, y: worldY });
-          gameState.current.particles.push({
-            id: Math.random(), x: worldX, y: worldY, vx: 0, vy: 0,
-            life: 0.5, maxLife: 0.5, size: 1.0, color: 'rgba(255, 255, 255, 0.4)', type: 'ripple'
-          });
         },
         onQuickSlotActivated: handleQuickSlotActivated,
-        onEscape: () => {
-          if (placingEntityType) { setPlacingEntityType(null); return; }
-          if (activeModal !== 'none') setActiveModal('none');
-          else setGameStarted(false);
-        }
+        onEscape: () => { if (activeModal !== 'none') setActiveModal('none'); else setGameStarted(false); }
       }, gameState);
     }
     inputManagerRef.current.init(canvasRef.current);
@@ -459,16 +344,10 @@ const App: React.FC = () => {
     gameLoop(lastTime.current);
     const autoSaveInterval = setInterval(saveGame, 30000);
     return () => {
-      inputManagerRef.current?.destroy();
-      window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(animationFrameId.current);
-      clearInterval(autoSaveInterval);
+      inputManagerRef.current?.destroy(); window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationFrameId.current); clearInterval(autoSaveInterval);
     };
-  }, [handleQuickSlotActivated, handleInteract, handleGather, saveGame, activeModal, getTileAt, gameStarted, placingEntityType, handleAction]);
-
-  useEffect(() => {
-    gameState.current.isPaused = activeModal !== 'none' || isDead;
-  }, [activeModal, isDead]);
+  }, [handleQuickSlotActivated, handleInteract, handleGather, saveGame, activeModal, getTileAt, gameStarted]);
 
   const gameLoop = (timestamp: number) => {
     const dt = Math.min((timestamp - lastTime.current) / 1000, 0.1);
@@ -479,8 +358,7 @@ const App: React.FC = () => {
   };
 
   const update = (dt: number) => {
-    const engine = gameState.current;
-    const now = performance.now();
+    const engine = gameState.current; const now = performance.now();
     const keys = inputManagerRef.current?.getKeys() || {};
     const playerTargetPos = inputManagerRef.current?.getPlayerTargetPos();
     engine.time += dt * 5; if (engine.time >= 2400) engine.time = 0;
@@ -489,111 +367,50 @@ const App: React.FC = () => {
     const workbenchInRange = engine.entities.some(e => e.type === 'workbench' && Math.sqrt((e.x - engine.playerPos.x)**2 + (e.y - engine.playerPos.y)**2) < 3);
     if (workbenchInRange !== isNearWorkbench) setIsNearWorkbench(workbenchInRange);
 
-    // AI and Environment logic
+    // AI & Environmental logic
     for (const ent of engine.entities) {
-      // Animal Roaming
-      if (ent.type === 'deer' || ent.type === 'rabbit') {
+      if ((ent.type === 'deer' || ent.type === 'rabbit')) {
         if (!ent.aiState) ent.aiState = 'idle';
         if (!ent.lastAiTick) ent.lastAiTick = now;
-
-        if (ent.aiState === 'idle') {
-          if (now - ent.lastAiTick > 3000 + Math.random() * 5000) {
-            // Chance to start walking
-            if (Math.random() < 0.4) {
-              ent.aiState = 'grazing';
-              ent.targetX = ent.x + (Math.random() - 0.5) * 8;
-              ent.targetY = ent.y + (Math.random() - 0.5) * 8;
-              ent.lastAiTick = now;
-              ent.facing = ent.targetX > ent.x ? 'right' : 'left';
-            } else {
-              ent.lastAiTick = now;
-            }
-          }
+        if (ent.aiState === 'idle' && now - ent.lastAiTick > 3000 + Math.random() * 4000) {
+            ent.aiState = 'grazing'; ent.targetX = ent.x + (Math.random() - 0.5) * 8; ent.targetY = ent.y + (Math.random() - 0.5) * 8;
+            ent.facing = ent.targetX > ent.x ? 'right' : 'left'; ent.lastAiTick = now;
         } else if (ent.aiState === 'grazing') {
-          const dx = ent.targetX! - ent.x;
-          const dy = ent.targetY! - ent.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 0.2) {
-            ent.aiState = 'idle';
-            ent.lastAiTick = now;
-          } else {
-            const moveSpeed = ent.type === 'rabbit' ? 3 : 2;
-            const stepX = (dx / dist) * moveSpeed * dt;
-            const stepY = (dy / dist) * moveSpeed * dt;
-            
-            if (getTileAt(ent.x + stepX, ent.y) !== 'water') ent.x += stepX;
-            if (getTileAt(ent.x, ent.y + stepY) !== 'water') ent.y += stepY;
-          }
+            const dx = ent.targetX! - ent.x, dy = ent.targetY! - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 0.2) { ent.aiState = 'idle'; ent.lastAiTick = now; }
+            else { const speed = ent.type === 'rabbit' ? 3 : 2; ent.x += (dx/dist)*speed*dt; ent.y += (dy/dist)*speed*dt; }
         }
       }
-      
-      // Campfire Smoke
-      if (ent.type === 'campfire' && Math.random() < 8 * dt) {
-        spawnParticles(ent.x, ent.y - 0.2, 'smoke', 1, 'rgba(150, 150, 150, 0.4)', 1.5);
-      }
+      if (ent.type === 'campfire' && Math.random() < 8 * dt) spawnParticles(ent.x, ent.y - 0.3, 'smoke', 1, 'rgba(150, 150, 150, 0.4)', 1.5);
     }
 
     let dx = 0, dy = 0;
-    if (keys['w'] || keys['arrowup']) dy -= 1;
-    if (keys['s'] || keys['arrowdown']) dy += 1;
-    if (keys['a'] || keys['arrowleft']) dx -= 1;
-    if (keys['d'] || keys['arrowright']) dx += 1;
+    if (keys['w'] || keys['arrowup']) dy -= 1; if (keys['s'] || keys['arrowdown']) dy += 1;
+    if (keys['a'] || keys['arrowleft']) dx -= 1; if (keys['d'] || keys['arrowright']) dx += 1;
     if (playerTargetPos) {
         const targetDx = playerTargetPos.x - engine.playerPos.x, targetDy = playerTargetPos.y - engine.playerPos.y;
-        const distToTarget = Math.sqrt(targetDx * targetDx + targetDy * targetDy);
-        if (distToTarget > 0.3) {
-            dx = targetDx / distToTarget; dy = targetDy / distToTarget;
-            if (keys['w'] || keys['s'] || keys['a'] || keys['d']) inputManagerRef.current?.clearPlayerTargetPos();
-        } else { inputManagerRef.current?.clearPlayerTargetPos(); dx = 0; dy = 0; velocity.current.x = 0; velocity.current.y = 0; }
+        const dist = Math.sqrt(targetDx * targetDx + targetDy * targetDy);
+        if (dist > 0.3) { dx = targetDx / dist; dy = targetDy / dist; } else { inputManagerRef.current?.clearPlayerTargetPos(); dx = 0; dy = 0; }
     }
-    const isSprinting = keys['shift'] && engine.playerStats.stamina > 0;
     if (dx !== 0 || dy !== 0) {
-      const mag = Math.sqrt(dx*dx + dy*dy); dx /= mag; dy /= mag;
-      const speed = isSprinting ? 14 : 7; const accel = 30; 
-      velocity.current.x += (dx * speed - velocity.current.x) * accel * dt;
-      velocity.current.y += (dy * speed - velocity.current.y) * accel * dt;
-      if (isSprinting) engine.playerStats.stamina = Math.max(0, engine.playerStats.stamina - 15 * dt);
+      const mag = Math.sqrt(dx*dx + dy*dy); const speed = keys['shift'] && engine.playerStats.stamina > 0 ? 14 : 7;
+      velocity.current.x += (dx/mag * speed - velocity.current.x) * 30 * dt; velocity.current.y += (dy/mag * speed - velocity.current.y) * 30 * dt;
       engine.playerStats.isWalking = true;
     } else { velocity.current.x -= velocity.current.x * 15 * dt; velocity.current.y -= velocity.current.y * 15 * dt; engine.playerStats.isWalking = false; }
     const nextX = engine.playerPos.x + velocity.current.x * dt, nextY = engine.playerPos.y + velocity.current.y * dt;
-    if (getTileAt(nextX, engine.playerPos.y) !== 'water') engine.playerPos.x = nextX; else velocity.current.x = 0;
-    if (getTileAt(engine.playerPos.x, nextY) !== 'water') engine.playerPos.y = nextY; else velocity.current.y = 0;
-    if (Math.abs(velocity.current.x) > 0.1 || Math.abs(velocity.current.y) > 0.1) {
-        const angle = Math.atan2(velocity.current.y, velocity.current.x);
-        if (angle > -Math.PI/4 && angle <= Math.PI/4) engine.playerStats.facing = 'se';
-        else if (angle > Math.PI/4 && angle <= 3*Math.PI/4) engine.playerStats.facing = 'sw';
-        else if (angle > -3*Math.PI/4 && angle <= -Math.PI/4) engine.playerStats.facing = 'ne';
-        else engine.playerStats.facing = 'nw';
-    }
-    if (!isSprinting && engine.playerStats.hunger > 0 && engine.playerStats.thirst > 0) engine.playerStats.stamina = Math.min(100, engine.playerStats.stamina + 10 * dt);
+    if (getTileAt(nextX, engine.playerPos.y) !== 'water') engine.playerPos.x = nextX;
+    if (getTileAt(engine.playerPos.x, nextY) !== 'water') engine.playerPos.y = nextY;
+    
     engine.playerStats.hunger = Math.max(0, engine.playerStats.hunger - 0.05 * dt);
     engine.playerStats.thirst = Math.max(0, engine.playerStats.thirst - 0.08 * dt);
-    if (engine.playerStats.hunger <= 0 || engine.playerStats.thirst <= 0) {
-        engine.playerStats.health = Math.max(0, engine.playerStats.health - 1 * dt);
-        if (engine.playerStats.health <= 0) handleDeath();
-    }
-    // Update Projectiles
+    
     for (let i = engine.projectiles.length - 1; i >= 0; i--) {
         const p = engine.projectiles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-        let hit = false;
-        for (const ent of engine.entities) {
-            const d = Math.sqrt((ent.x - p.x)**2 + (ent.y - p.y)**2);
-            if (d < 0.8) {
-                ent.health -= p.damage; hit = true;
-                addFloatingText(ent.x, ent.y, `-${p.damage}`, '#ef4444');
-                spawnParticles(ent.x, ent.y, 'spark', 5, '#ffffff', 0.5);
-                if (ent.health <= 0) handleGather(ent.id);
-                break;
-            }
-        }
-        if (hit || p.life <= 0) engine.projectiles.splice(i, 1);
+        if (p.life <= 0) engine.projectiles.splice(i, 1);
     }
     for (let i = engine.particles.length - 1; i >= 0; i--) {
         const p = engine.particles[i]; p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
-        if (p.type === 'smoke') {
-          p.size += 0.5 * dt;
-          p.vx += (Math.random() - 0.5) * 0.5 * dt;
-        }
+        if (p.type === 'smoke') { p.size += 0.3 * dt; p.vx += (Math.random() - 0.5) * 0.2 * dt; }
         if (p.life <= 0) engine.particles.splice(i, 1);
     }
     for (let i = engine.floatingTexts.length - 1; i >= 0; i--) {
@@ -615,26 +432,22 @@ const App: React.FC = () => {
               chunk[x][y] = calculateTileType(wx, wy);
               if (chunk[x][y] === 'grass') {
                 if (Math.random() < 0.04) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'tree_oak', health: 100, maxHealth: 100 });
-                else if (Math.random() < 0.015) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'rock_standard', health: 80, maxHealth: 80 });
-                else if (Math.random() < 0.02) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'bush_berry', health: 50, maxHealth: 50 });
-                else if (Math.random() < 0.005) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'deer', health: 60, maxHealth: 60, aiState: 'idle', lastAiTick: performance.now() });
-                else if (Math.random() < 0.008) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'rabbit', health: 20, maxHealth: 20, aiState: 'idle', lastAiTick: performance.now() });
+                else if (Math.random() < 0.005) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'deer', health: 60, maxHealth: 60, aiState: 'idle' });
+                else if (Math.random() < 0.01) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'rabbit', health: 20, maxHealth: 20, aiState: 'idle' });
               }
           }
       }
       return chunk;
   };
 
-  const handleDeath = () => { setIsDead(true); SoundManager.playUI('fanfare'); };
   const startNewGame = () => {
-    gameState.current = { ...gameState.current, playerPos: { x: 0, y: 0 }, playerStats: { ...INITIAL_STATS, character: gameState.current.playerStats.character }, inventory: [{ ...ITEMS.axe }, { ...ITEMS.pickaxe }, { ...ITEMS.wood, quantity: 20 }, { ...ITEMS.berry, quantity: 20 }, { ...ITEMS.arrow, quantity: 50 }, { ...ITEMS.bow }], entities: [], projectiles: [], particles: [], chunks: {}, time: 800, gameStarted: true, isPaused: false };
+    gameState.current = { ...gameState.current, playerPos: { x: 0, y: 0 }, playerStats: { ...INITIAL_STATS, character: gameState.current.playerStats.character }, inventory: [{ ...ITEMS.axe }, { ...ITEMS.wood, quantity: 10 }, { ...ITEMS.berry, quantity: 10 }], entities: [], projectiles: [], particles: [], chunks: {}, time: 800, gameStarted: true, isPaused: false };
     setIsDead(false); setActiveModal('none'); setGameStarted(true);
   };
 
   const continueGame = () => {
     const dataStr = localStorage.getItem(SAVE_KEY);
-    if (!dataStr) return;
-    try { const data = JSON.parse(dataStr); gameState.current = { ...gameState.current, ...data, gameStarted: true, isPaused: false }; setIsDead(false); setActiveModal('none'); setGameStarted(true); } catch(e) {}
+    if (dataStr) try { const data = JSON.parse(dataStr); gameState.current = { ...gameState.current, ...data, gameStarted: true, isPaused: false }; setGameStarted(true); } catch(e) {}
   };
 
   return (
@@ -657,41 +470,21 @@ const App: React.FC = () => {
                             if (item) item.quantity -= (qty as number);
                         });
                         if (recipe.output.type === 'structure') {
-                            setPlacingEntityType(recipe.output.placeEntity!);
-                            setActiveModal('none');
+                            const facing = gameState.current.playerStats.facing;
+                            let ox = 0, oy = 0;
+                            if (facing === 'nw') { ox = -1.2; oy = -1.2; } else if (facing === 'ne') { ox = 1.2; oy = -1.2; } else if (facing === 'sw') { ox = -1.2; oy = 1.2; } else { ox = 1.2; oy = 1.2; }
+                            handleAction('place', { x: gameState.current.playerPos.x + ox, y: gameState.current.playerPos.y + oy, type: recipe.output.placeEntity! });
                         } else {
-                            gameState.current.inventory.push({ ...recipe.output, id: recipe.output.id + Math.random() });
+                            const existing = gameState.current.inventory.find(i => i.id === recipe.output.id && i.quantity < (i.maxStack || 99));
+                            if (existing) existing.quantity += recipe.output.quantity; else gameState.current.inventory.push({ ...recipe.output });
                         }
-                        showMessage(TRANSLATIONS[gameState.current.settings.language].crafted);
-                        SoundManager.play('craft');
-                        gameState.current.playerStats.xp += 20; checkLevelUp(gameState.current.playerStats);
+                        SoundManager.play('craft'); gameState.current.playerStats.xp += 20; checkLevelUp(gameState.current.playerStats);
                     }
                 }} onClose={() => setActiveModal('none')} onSwitchToInventory={() => setActiveModal('inventory')} language={gameState.current.settings.language} />}
                 {isDead && <DeathScreen stats={gameState.current.playerStats} language={gameState.current.settings.language} onRetry={startNewGame} />}
-                {placingEntityType && (
-                    <div className="absolute bottom-32 left-1/2 -translate-x-1/2 px-6 py-3 bg-amber-600 rounded-full border border-stone-900 shadow-2xl font-black text-stone-950 uppercase tracking-widest animate-pulse z-50">
-                        Placement Mode: Click to Place {placingEntityType} (ESC to cancel)
-                    </div>
-                )}
             </>
         ) : (
-            <MainMenu 
-                onStart={startNewGame} 
-                onContinue={continueGame} 
-                hasActiveSession={hasSave} 
-                settings={gameState.current.settings} 
-                onUpdateSettings={(s) => { 
-                  gameState.current.settings = s; 
-                  saveSettings(); 
-                  setUiState(u => u + 1); 
-                }} 
-                playerStats={gameState.current.playerStats} 
-                onUpdatePlayerStats={(p) => { 
-                  gameState.current.playerStats = p; 
-                  saveSettings(); 
-                  setUiState(u => u + 1); 
-                }} 
-            />
+            <MainMenu onStart={startNewGame} onContinue={continueGame} hasActiveSession={hasSave} settings={gameState.current.settings} onUpdateSettings={(s) => { gameState.current.settings = s; saveSettings(); setUiState(u => u + 1); }} playerStats={gameState.current.playerStats} onUpdatePlayerStats={(p) => { gameState.current.playerStats = p; saveSettings(); setUiState(u => u + 1); }} />
         )}
     </div>
   );
