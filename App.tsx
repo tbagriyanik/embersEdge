@@ -928,21 +928,24 @@ const App: React.FC = () => {
     } catch(e) {}
   };
 
-  const craftItem = (recipeId: string) => {
+  const craftItem = (recipeId: string, multiple: number = 1) => {
     const recipe = RECIPES.find(r => r.id === recipeId);
     if (recipe) {
         const engine = gameState.current;
-        const canCraft = Object.entries(recipe.ingredients).every(([id, qty]) => {
+        
+        // Multi-check
+        const canCraftMultiple = Object.entries(recipe.ingredients).every(([id, qty]) => {
             const item = engine.inventory.find(i => i.id === id);
-            return item && item.quantity >= (qty as number);
+            return item && item.quantity >= (qty as number) * multiple;
         }) && (recipe.workbenchLevelRequired === undefined || currentWorkbenchLevel >= recipe.workbenchLevelRequired);
 
-        if (!canCraft) return false;
+        if (!canCraftMultiple) return false;
 
+        // Consume ingredients for all repetitions
         Object.entries(recipe.ingredients).forEach(([id, qty]) => {
             const item = engine.inventory.find(i => i.id === id);
             if (item) {
-              item.quantity -= (qty as number);
+              item.quantity -= (qty as number) * multiple;
               if (item.quantity <= 0) {
                 engine.quickSlots = engine.quickSlots.map(uid => uid === item.uniqueId ? null : uid);
                 engine.inventory = engine.inventory.filter(i => i.uniqueId !== item.uniqueId);
@@ -950,13 +953,19 @@ const App: React.FC = () => {
             }
         });
 
+        // Add output for all repetitions
         if (recipe.output.type === 'structure') {
-            handleAction('place', { x: engine.playerPos.x + 1, y: engine.playerPos.y + 1, type: recipe.output.placeEntity! });
+            // Placing structures usually only makes sense one at a time via this UI, 
+            // but we'll honor multiple if it's somehow called.
+            for (let i = 0; i < multiple; i++) {
+                handleAction('place', { x: engine.playerPos.x + 1 + (i * 0.5), y: engine.playerPos.y + 1 + (i * 0.5), type: recipe.output.placeEntity! });
+            }
         } else {
-            addItemToInventory(recipe.output, recipe.output.quantity);
+            addItemToInventory(recipe.output, recipe.output.quantity * multiple);
         }
+        
         SoundManager.play('craft'); 
-        engine.playerStats.xp += 20; 
+        engine.playerStats.xp += 20 * multiple; 
         checkLevelUp(engine.playerStats);
         setUiState(prev => prev + 1);
         return true;

@@ -8,7 +8,7 @@ interface Props {
   playerLevel: number;
   workbenchLevel: number;
   isNearWorkbench: boolean;
-  onCraft: (recipeId: string) => void;
+  onCraft: (recipeId: string, multiple?: number) => void;
   onClose: () => void;
   onSwitchToInventory: () => void;
   onSwitchToCrafting?: () => void;
@@ -34,6 +34,15 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
       return hasIngredients && hasWorkbenchLevel;
   };
 
+  const calculateMaxMultiple = (recipe: Recipe) => {
+      const multiples = Object.entries(recipe.ingredients).map(([id, qty]) => {
+          const item = inventory.find(i => i.id === id);
+          if (!item) return 0;
+          return Math.floor(item.quantity / (qty as number));
+      });
+      return Math.min(...multiples);
+  };
+
   const tradeRecipes = RECIPES.filter(r => r.category === 'trade');
   const buyRecipes = tradeRecipes.filter(r => r.id.startsWith('buy'));
   const sellRecipes = tradeRecipes.filter(r => r.id.startsWith('sell'));
@@ -42,6 +51,7 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
     const canCraft = checkIngredients(recipe);
     const isSelling = recipe.id.startsWith('sell');
     const needsWorkbenchUpgrade = recipe.workbenchLevelRequired !== undefined && workbenchLevel < recipe.workbenchLevelRequired;
+    const maxMultiple = calculateMaxMultiple(recipe);
 
     return (
       <div key={recipe.id} className={`p-4 rounded-2xl border-2 flex flex-col justify-between transition-all ${canCraft ? 'bg-white/10 border-white/20 hover:bg-white/15' : 'bg-black/40 border-white/5 opacity-60'}`}>
@@ -67,9 +77,16 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
             );
           })}
         </div>
-        <button disabled={!canCraft} onClick={() => onCraft(recipe.id)} className={`w-full py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${canCraft ? (isSelling ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-stone-950') : 'bg-white/5 text-white/20'}`}>
-          {shopMode ? t(isSelling ? 'sell' : 'buy') : 'CRAFT'}
-        </button>
+        <div className="flex gap-2">
+            <button disabled={!canCraft} onClick={() => onCraft(recipe.id, 1)} className={`flex-1 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${canCraft ? (isSelling ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-stone-950') : 'bg-white/5 text-white/20'}`}>
+              {shopMode ? t(isSelling ? 'sell' : 'buy') : 'CRAFT'}
+            </button>
+            {shopMode && isSelling && maxMultiple > 1 && (
+                <button onClick={() => onCraft(recipe.id, maxMultiple)} className="px-3 py-3 bg-white/10 hover:bg-emerald-500 text-white font-black rounded-xl text-[10px] uppercase tracking-tighter transition-all">
+                    {t('sell_all')} ({maxMultiple})
+                </button>
+            )}
+        </div>
       </div>
     );
   };
