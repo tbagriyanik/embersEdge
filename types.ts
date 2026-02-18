@@ -168,8 +168,8 @@ export interface GameState {
 }
 
 export interface InputManagerCallbacks {
-  onOpenInventory: () => void;
-  onOpenCrafting: () => void;
+  onToggleInventory: () => void;
+  onToggleCrafting: () => void;
   onOpenSettings: () => void;
   onInteract: (entityId: string | null) => void;
   onGather: (entityId: string) => void;

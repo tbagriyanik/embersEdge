@@ -33,7 +33,6 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
     if (equipRef.current) {
       const rect = equipRef.current.getBoundingClientRect();
       const dragItem = items[draggedIndex];
-      // Allow equipping weapons and tools via drag drop
       const canEquip = dragItem.type === 'tool' || dragItem.type === 'weapon';
       setIsOverEquip(canEquip && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom);
     }
@@ -105,7 +104,6 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
 
   const equipment = items.filter(i => i.type === 'tool' || i.type === 'weapon');
   const consumables = items.filter(i => i.type === 'food');
-  // Structures are merged into materials/resources for simplicity per user request
   const otherItems = items.filter(i => i.type === 'resource' || i.type === 'material' || i.type === 'structure');
 
   return (
@@ -154,7 +152,7 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
             </div>
             
             <div className="flex-1 flex flex-col gap-4">
-              <span className="text-[10px] sm:text-[12px] font-black uppercase tracking-widest text-white/30 md:text-center">Active Gear</span>
+              <span className="text-[10px] sm:text-[12px] font-black uppercase tracking-widest text-white/30 md:text-center">{t('active_gear')}</span>
               {isNearWorkbench ? (
                 <button onClick={() => onAction('repair_all', null)} className="w-full py-4 rounded-full font-black text-[10px] sm:text-[12px] uppercase bg-emerald-500 text-white shadow-xl hover:bg-emerald-400 transition-all active:scale-95">🛠️ Repair All</button>
               ) : (

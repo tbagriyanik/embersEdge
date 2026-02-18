@@ -161,14 +161,13 @@ const App: React.FC = () => {
                 }
             }
         } else if (data.type === 'tool' || data.type === 'weapon') {
-            // If action is 'equip', always set it. If 'use', toggle it.
             if (action === 'equip') engine.playerStats.equippedItemId = data.id;
             else engine.playerStats.equippedItemId = engine.playerStats.equippedItemId === data.id ? null : data.id;
             SoundManager.playUI('equip');
         } else if (data.type === 'structure' || data.placeEntity) {
             const facing = engine.playerStats.facing;
             let ox = 0, oy = 0;
-            if (facing === 'nw') { ox = -1.2; oy = -1.2; } else if (facing === 'ne') { ox = 1.2; oy = -1.2; } else if (facing === 'sw') { ox = -1.2; oy = 1.2; } else { ox = 1.2; oy = 1.2; }
+            if (facing === 'nw') { ox = -1.5; oy = -1.5; } else if (facing === 'ne') { ox = 1.5; oy = -1.5; } else if (facing === 'sw') { ox = -1.5; oy = 1.5; } else { ox = 1.5; oy = 1.5; }
             handleAction('place', { x: engine.playerPos.x + ox, y: engine.playerPos.y + oy, type: data.placeEntity });
         }
     } else if (action === 'fire') {
@@ -189,6 +188,19 @@ const App: React.FC = () => {
         }
     } else if (action === 'place') {
         const { x, y, type } = data;
+        
+        // NO-OVERLAP CHECK
+        const collisionRadius = 1.2;
+        const isSpaceOccupied = engine.entities.some(ent => {
+            const dist = Math.sqrt((ent.x - x)**2 + (ent.y - y)**2);
+            return dist < collisionRadius;
+        });
+
+        if (isSpaceOccupied) {
+            showMessage("Space occupied!");
+            return;
+        }
+
         engine.entities.push({ id: Math.random().toString(), x, y, type: type, health: 100, maxHealth: 100 });
         SoundManager.play('build');
         showMessage(t('placed') + " " + t(type));
@@ -270,11 +282,10 @@ const App: React.FC = () => {
       }
     } else {
         const playerPos = engine.playerPos;
-        // Improved Lakeside drinking range
-        const waterCheckRadius = 1.8;
+        const waterCheckRadius = 2.0;
         let nearWater = false;
-        for (let ox = -waterCheckRadius; ox <= waterCheckRadius; ox += 0.4) {
-            for (let oy = -waterCheckRadius; oy <= waterCheckRadius; oy += 0.4) {
+        for (let ox = -waterCheckRadius; ox <= waterCheckRadius; ox += 0.5) {
+            for (let oy = -waterCheckRadius; oy <= waterCheckRadius; oy += 0.5) {
                 if (getTileAt(playerPos.x + ox, playerPos.y + oy) === 'water') {
                     nearWater = true;
                     break;
@@ -328,20 +339,37 @@ const App: React.FC = () => {
     }
     
     playerStats.xp += GATHER_XP_PER_HIT; checkLevelUp(playerStats);
+    
     if (equippedTool && equippedTool.durability !== undefined) {
       equippedTool.durability = Math.max(0, equippedTool.durability - 10);
       if (equippedTool.durability <= 0) { 
         showMessage(t('tool_broken')); 
+        const brokenToolId = equippedTool.id;
+        const brokenToolType = equippedTool.type;
         playerStats.equippedItemId = null; 
         
-        // AUTO-EQUIP: Look for replacement tool of same ID
-        const replacement = inventory.find(i => i.id === equippedTool.id && i.durability && i.durability > 0);
-        if (replacement) {
-           playerStats.equippedItemId = replacement.id;
-           SoundManager.playUI('equip');
+        // PERMANENTLY REMOVE FROM INVENTORY
+        const toolIdx = inventory.indexOf(equippedTool);
+        if (toolIdx > -1) {
+          inventory.splice(toolIdx, 1);
+        }
+        
+        // AUTO-EQUIP NEXT AVAILABLE OF SAME TYPE
+        const nextTool = inventory.find(i => i.id === brokenToolId && i.durability && i.durability > 0);
+        if (nextTool) {
+          playerStats.equippedItemId = nextTool.id;
+          SoundManager.playUI('equip');
+        } else {
+          // Try to find any tool of the same general type (axe, pickaxe)
+          const fallbackTool = inventory.find(i => i.type === brokenToolType && i.durability && i.durability > 0);
+          if (fallbackTool) {
+            playerStats.equippedItemId = fallbackTool.id;
+            SoundManager.playUI('equip');
+          }
         }
       }
     }
+    
     if (targetEntity.health <= 0) {
       engine.entities.splice(entityIndex, 1);
       spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo?.particle as Particle['type'] || 'dust', 10, '#a16207', 1.0);
@@ -359,8 +387,8 @@ const App: React.FC = () => {
     
     if (!inputManagerRef.current) {
       inputManagerRef.current = new InputManager({
-        onOpenInventory: () => setActiveModal('inventory'),
-        onOpenCrafting: () => setActiveModal('crafting'),
+        onToggleInventory: () => setActiveModal(prev => prev === 'inventory' ? 'none' : 'inventory'),
+        onToggleCrafting: () => setActiveModal(prev => prev === 'crafting' ? 'none' : 'crafting'),
         onOpenSettings: () => setActiveModal('settings'),
         onInteract: handleInteract,
         onGather: handleGather,
@@ -376,12 +404,11 @@ const App: React.FC = () => {
         },
         onQuickSlotActivated: handleQuickSlotActivated,
         onEscape: () => { 
-          // Intelligent Escape Handling
-          if (activeModal !== 'none') {
-            setActiveModal('none');
-          } else {
+          setActiveModal(prev => {
+            if (prev !== 'none') return 'none';
             setGameStarted(false);
-          }
+            return 'none';
+          });
         }
       }, gameState);
     }
@@ -474,7 +501,6 @@ const App: React.FC = () => {
     
     for (let i = engine.projectiles.length - 1; i >= 0; i--) {
         const p = engine.projectiles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-        
         const hitEntity = engine.entities.find(e => Math.sqrt((e.x-p.x)**2 + (e.y-p.y)**2) < 0.6);
         if (hitEntity && hitEntity.id !== p.ownerId) {
           hitEntity.health -= p.damage;
@@ -482,7 +508,6 @@ const App: React.FC = () => {
           engine.projectiles.splice(i, 1);
           continue;
         }
-
         if (p.life <= 0) engine.projectiles.splice(i, 1);
     }
     for (let i = engine.particles.length - 1; i >= 0; i--) {
@@ -539,8 +564,8 @@ const App: React.FC = () => {
                 <HUD stats={gameState.current.playerStats} time={gameState.current.time} message={message} gameState={gameState.current} onAction={handleAction} usableItemsForQuickSlots={getUsableItemsForQuickSlots(gameState.current.inventory)} onZoom={(d) => inputManagerRef.current?.handleWheel({ deltaY: d } as WheelEvent)} onRotate={() => {}} onOpenSettings={() => setActiveModal('settings')} />
                 <div className="absolute top-4 right-4 z-50 flex gap-4">
                     <Minimap gameState={gameState.current} />
-                    <button onClick={() => setActiveModal('inventory')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto">🎒</button>
-                    <button onClick={() => setActiveModal('crafting')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto">⚒️</button>
+                    <button onClick={() => setActiveModal(prev => prev === 'inventory' ? 'none' : 'inventory')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto">🎒</button>
+                    <button onClick={() => setActiveModal(prev => prev === 'crafting' ? 'none' : 'crafting')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto">⚒️</button>
                 </div>
                 {activeModal === 'inventory' && <Inventory items={gameState.current.inventory} equippedItemId={gameState.current.playerStats.equippedItemId} isNearWorkbench={isNearWorkbench} onAction={handleAction} onClose={() => setActiveModal('none')} onSwitchToCrafting={() => setActiveModal('crafting')} language={gameState.current.settings.language} />}
                 {activeModal === 'crafting' && <Crafting inventory={gameState.current.inventory} playerLevel={gameState.current.playerStats.level} isNearWorkbench={isNearWorkbench} onCraft={(recipeId) => {
@@ -554,7 +579,7 @@ const App: React.FC = () => {
                         if (recipe.output.type === 'structure') {
                             const facing = engine.playerStats.facing;
                             let ox = 0, oy = 0;
-                            if (facing === 'nw') { ox = -1.2; oy = -1.2; } else if (facing === 'ne') { ox = 1.2; oy = -1.2; } else if (facing === 'sw') { ox = -1.2; oy = 1.2; } else { ox = 1.2; oy = 1.2; }
+                            if (facing === 'nw') { ox = -1.5; oy = -1.5; } else if (facing === 'ne') { ox = 1.5; oy = -1.5; } else if (facing === 'sw') { ox = -1.5; oy = 1.5; } else { ox = 1.5; oy = 1.5; }
                             handleAction('place', { x: engine.playerPos.x + ox, y: engine.playerPos.y + oy, type: recipe.output.placeEntity! });
                         } else {
                             const existing = engine.inventory.find(i => i.id === recipe.output.id && i.quantity < (i.maxStack || 99));

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { PlayerStats, GameState, Language, Item } from '../types';
 import { TRANSLATIONS } from '../constants';
@@ -11,7 +12,7 @@ interface Props {
   onZoom: (delta: number) => void; 
   onRotate: (delta: number) => void;
   onOpenSettings: () => void;
-  usableItemsForQuickSlots: Item[]; // New prop: items already filtered for quick slots
+  usableItemsForQuickSlots: Item[];
 }
 
 export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction, onZoom, onRotate, onOpenSettings, usableItemsForQuickSlots }) => {
@@ -19,35 +20,9 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
   const minutes = Math.floor(((time / 2400) * 24 * 60) % 60);
   const t = (key: string) => TRANSLATIONS[gameState.settings.language][key] || key;
 
-  // This logic is now handled in App.tsx and passed down via usableItemsForQuickSlots
-  // const getUniqueItems = (types: string[]) => {
-  //   const items = gameState.inventory.filter(i => types.includes(i.type));
-  //   const uniqueMap = new Map<string, { item: Item, total: number, hasOverflow: boolean, maxStack: number }>();
-    
-  //   items.forEach(i => {
-  //     const existing = uniqueMap.get(i.id);
-  //     if (!existing) {
-  //       uniqueMap.set(i.id, { 
-  //         item: i, 
-  //         total: i.quantity, 
-  //         hasOverflow: false,
-  //         maxStack: i.maxStack || 99
-  //       });
-  //     } else {
-  //       const updatedTotal = (existing.total || 0) + i.quantity;
-  //       uniqueMap.set(i.id, { 
-  //         ...existing, 
-  //         total: updatedTotal, 
-  //         hasOverflow: updatedTotal > (existing.maxStack || 99) 
-  //       });
-  //     }
-  //   });
-  //   return Array.from(uniqueMap.values());
-  // };
-
-  // const usableItems = getUniqueItems(['tool', 'weapon', 'food']);
-  const resources = getUniqueItems(gameState.inventory, ['resource', 'material']); // Keep resource logic here for now
-
+  // Track key survival resources in stock list
+  const stockItems = getUniqueItems(gameState.inventory, ['resource', 'material']);
+  
   const weatherIcons: Record<string, string> = {
     clear: '☀️',
     rain: '🌧️',
@@ -61,7 +36,6 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
     return total.toString();
   };
 
-  // Helper function for resources (local to HUD for now)
   function getUniqueItems(inventory: Item[], types: string[]) {
     const items = inventory.filter(i => types.includes(i.type));
     const uniqueMap = new Map<string, { item: Item, total: number, hasOverflow: boolean, maxStack: number }>();
@@ -154,7 +128,7 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
         <div className="p-3 sm:p-4 bg-black/30 backdrop-blur-2xl border border-white/20 rounded-[2.5rem] flex flex-col gap-3 shadow-2xl max-h-[60vh] overflow-hidden">
           <span className="text-[9px] sm:text-[12px] font-black text-white/40 uppercase tracking-[0.2em] text-center mb-1">{t('stock')}</span>
           <div className="flex flex-col gap-2.5 overflow-y-auto pr-1.5 no-scrollbar">
-            {resources.length > 0 ? resources.map(({item, total, maxStack}) => (
+            {stockItems.length > 0 ? stockItems.map(({item, total, maxStack}) => (
               <div key={item.id} className="relative w-12 h-12 sm:w-14 sm:h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center group hover:bg-white/15 transition-all shadow-lg">
                 <span className="text-2xl sm:text-3xl group-hover:scale-110 transition-transform">{item.icon}</span>
                 <span className="absolute -bottom-1 -right-1 bg-amber-500 border border-stone-900 rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-[8px] sm:text-[10px] font-black text-stone-950 shadow-xl leading-none">
@@ -180,12 +154,10 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
       <div className="flex flex-col items-center w-full gap-3 pointer-events-auto mb-4" onMouseDown={e => e.stopPropagation()}>
         <div className="flex gap-1.5 sm:gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/20 rounded-full shadow-2xl overflow-x-auto max-w-[95vw] no-scrollbar">
           {[...Array(9)].map((_, i) => {
-            const item = usableItemsForQuickSlots[i]; // Use the passed prop
+            const item = usableItemsForQuickSlots[i];
             const isEquipped = item && item.id === stats.equippedItemId;
-
-            // Find the full item data from inventory to get quantity and durability
             const itemInInventory = item ? gameState.inventory.find(invItem => invItem.id === item.id) : null;
-            const displayItem = itemInInventory || item; // Use the one from inventory if found, otherwise the `usableItemsForQuickSlots` item
+            const displayItem = itemInInventory || item;
 
             return (
               <div 
@@ -199,7 +171,7 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
                 {displayItem ? (
                   <>
                     <span className="text-xl sm:text-2xl drop-shadow-md">{displayItem.icon}</span>
-                    {(displayItem.quantity > 1) && ( // Check quantity from displayItem
+                    {(displayItem.quantity > 1) && (
                       <span className="absolute -bottom-1 -right-1 bg-amber-400 text-stone-900 w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center text-[8px] sm:text-[10px] font-black rounded-full border border-stone-900 shadow-md leading-none">
                         {formatQuantity(displayItem.quantity, displayItem.maxStack || 99)}
                       </span>

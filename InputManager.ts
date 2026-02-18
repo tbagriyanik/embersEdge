@@ -46,8 +46,6 @@ export class InputManager {
     this.canvas = canvas;
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
-    
-    // Attaching listeners to window for better robustness
     window.addEventListener('mousedown', this.handleMouseDown);
     window.addEventListener('mouseup', this.handleMouseUp);
     window.addEventListener('mousemove', this.handleMouseMove);
@@ -75,11 +73,9 @@ export class InputManager {
 
     for (const ent of engine.entities) {
       if (!allActionable.includes(ent.type)) continue;
-      
       const dx = ent.x - player.x;
       const dy = ent.y - player.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      
       if (dist < minDist) {
         minDist = dist;
         closest = ent;
@@ -91,23 +87,24 @@ export class InputManager {
   private handleKeyDown = (e: KeyboardEvent) => {
     const key = e.key.toLowerCase();
 
-    // Escape should always work to close modals
+    // Escape should always work to close modals or back out
     if (key === 'escape') {
       this.callbacks.onEscape();
       return;
     }
 
-    // Ignore other world interactions if paused
-    if (this.gameState.current.isPaused) return;
-
     this.keys[key] = true;
 
     if (key === 'f') {
-      this.callbacks.onOpenInventory();
+      this.callbacks.onToggleInventory();
     }
     if (key === 'c') {
-      this.callbacks.onOpenCrafting();
+      this.callbacks.onToggleCrafting();
     }
+
+    // Ignore other interactions if game is effectively paused/paused by modal
+    if (this.gameState.current.isPaused) return;
+
     if (key === 'e') {
       const target = this.getNearestEntity();
       if (target) {
@@ -133,9 +130,6 @@ export class InputManager {
 
   private handleMouseDown = (e: MouseEvent) => {
     if (!this.canvas) return;
-
-    // Ignore clicks if game is paused (modal is open)
-    // The modals use fixed inset-0 and pointer-events-auto, but we add this for extra safety.
     if (this.gameState.current.isPaused) return;
 
     if (e.button === 0) { // Left click
@@ -174,9 +168,7 @@ export class InputManager {
             }
         }
       }
-      
       this.callbacks.onClickToMove(worldX, worldY);
-      
     } else if (e.button === 1) { 
       this.mouseState.middleDown = true;
     } else if (e.button === 2) { 
@@ -185,6 +177,7 @@ export class InputManager {
     }
   };
 
+  // Fixed error: Changed MouseUpEvent to MouseEvent as it's the correct DOM type
   private handleMouseUp = (e: MouseEvent) => {
     if (e.button === 0) {
       this.mouseState.leftDown = false;
@@ -242,7 +235,6 @@ export class InputManager {
   };
 
   handleWheel = (e: WheelEvent) => {
-    // Only zoom if on top of the main canvas area
     if (this.canvas && (e.target === this.canvas || this.canvas.contains(e.target as Node))) {
       e.preventDefault();
       this.callbacks.onZoom(e.deltaY);
