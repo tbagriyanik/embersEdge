@@ -1,4 +1,3 @@
-
 import { Item, Recipe, PlayerStats, Language } from './types';
 
 export const TILE_WIDTH = 64;
@@ -93,7 +92,7 @@ export const ITEMS: { [key: string]: Item } = {
   tent: { id: 'tent', uniqueId: 'tent-base', name: 'Tent', type: 'structure', icon: '⛺', description: 'Allows rest.', stackable: false, quantity: 1, placeEntity: 'tent' },
   hut: { id: 'hut', uniqueId: 'hut-base', name: 'Hut', type: 'structure', icon: '🏠', description: 'Sturdy shelter.', stackable: false, quantity: 1, placeEntity: 'hut' },
   workbench: { id: 'workbench', uniqueId: 'bench-base', name: 'Workbench', type: 'structure', icon: '⚒️', description: 'Complex crafting.', stackable: false, quantity: 1, placeEntity: 'workbench' },
-];
+};
 
 export const RECIPES: Recipe[] = [
   { id: 'craft_axe', name: 'Stone Axe', output: { ...ITEMS.axe }, ingredients: { wood: 5, stone: 2 }, levelRequired: 1, category: 'tools' },
@@ -108,6 +107,7 @@ export const RECIPES: Recipe[] = [
   // Shop Selling
   { id: 'sell_wood', name: 'Sell Wood (x10)', output: { ...ITEMS.gold_coin, quantity: 1 }, ingredients: { wood: 10 }, levelRequired: 1, category: 'trade' },
   { id: 'sell_stone', name: 'Sell Stone (x10)', output: { ...ITEMS.gold_coin, quantity: 2 }, ingredients: { stone: 10 }, levelRequired: 1, category: 'trade' },
+  { id: 'sell_meat_raw', name: 'Sell Raw Meat', output: { ...ITEMS.gold_coin, quantity: 1 }, ingredients: { meat_raw: 1 }, levelRequired: 1, category: 'trade' },
   { id: 'sell_meat_cooked', name: 'Sell Steak', output: { ...ITEMS.gold_coin, quantity: 3 }, ingredients: { meat_cooked: 1 }, levelRequired: 1, category: 'trade' },
   { id: 'sell_berries', name: 'Sell Berries (x20)', output: { ...ITEMS.gold_coin, quantity: 2 }, ingredients: { berry: 20 }, levelRequired: 1, category: 'trade' },
 
