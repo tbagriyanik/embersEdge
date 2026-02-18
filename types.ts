@@ -1,7 +1,7 @@
 
 export type ResourceType = 'wood' | 'stone' | 'berry' | 'water' | 'meat' | 'iron' | 'herb' | 'gold';
 export type WeatherType = 'clear' | 'rain' | 'fog' | 'snow';
-export type TileType = 'grass' | 'sand' | 'water' | 'snow_tile' | 'desert_tile' | 'stone';
+export type TileType = 'grass' | 'sand' | 'water' | 'snow_tile' | 'desert_tile' | 'stone' | 'road_tile';
 export type FacingDirection = 'se' | 'sw' | 'ne' | 'nw';
 export type Language = 'en' | 'tr';
 export type Gender = 'male' | 'female';
@@ -66,7 +66,7 @@ export interface Entity {
   targetY?: number;
   isFleeing?: boolean;
   spawnTime?: number;
-  aiState?: 'idle' | 'grazing' | 'fleeing' | 'chasing' | 'attacking' | 'wandering';
+  aiState?: 'idle' | 'grazing' | 'fleeing' | 'chasing' | 'attacking' | 'wandering' | 'traveling';
   lastAiTick?: number;
   attackCooldown?: number;
   damage?: number;
@@ -75,6 +75,8 @@ export interface Entity {
   growthTimer?: number;
   facing?: 'left' | 'right';
   dialogueIndex?: number;
+  homeVillage?: { cx: number; cy: number };
+  targetVillage?: { cx: number; cy: number };
 }
 
 export interface Projectile {
@@ -109,7 +111,7 @@ export interface Particle {
   maxLife: number;
   size: number;
   color: string;
-  type: 'dust' | 'blood' | 'spark' | 'leaf' | 'rain_splash' | 'wood' | 'stone' | 'dirt' | 'ripple' | 'smoke' | 'hit_spark';
+  type: 'dust' | 'blood' | 'spark' | 'leaf' | 'rain_splash' | 'wood' | 'stone' | 'dirt' | 'ripple' | 'smoke' | 'hit_spark' | 'heart';
   rotation?: number;
   rotSpeed?: number;
 }

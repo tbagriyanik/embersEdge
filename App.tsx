@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GameState, PlayerStats, Entity, Particle, Projectile, FloatingText, WeatherState, Item, TileType, GameSettings, WeatherType, EntityType } from './types';
-import { INITIAL_STATS, TILE_WIDTH, TILE_HEIGHT, ITEMS, RECIPES, CHUNK_SIZE, SAVE_KEY, SETTINGS_SAVE_KEY, TRANSLATIONS, GATHER_BASE_DAMAGE, GATHER_XP_PER_HIT, GATHER_ITEM_QUANTITY, GATHER_TOOL_REQUIREMENTS, MAX_INVENTORY_SLOTS, GATHER_HAND_DAMAGE, GATHER_TOOL_BOOST, VILLAGER_DIALOGUE } from './constants';
+import { INITIAL_STATS, TILE_WIDTH, TILE_HEIGHT, ITEMS, RECIPES, CHUNK_SIZE, SAVE_KEY, SETTINGS_SAVE_KEY, TRANSLATIONS, GATHER_BASE_DAMAGE, GATHER_XP_PER_HIT, GATHER_ITEM_QUANTITY, GATHER_TOOL_REQUIREMENTS, MAX_INVENTORY_SLOTS, GATHER_HAND_DAMAGE, GATHER_TOOL_BOOST, VILLAGER_DIALOGUE, VILLAGE_NAMES } from './constants';
 import { HUD } from './components/HUD';
 import { GameCanvas } from './components/GameCanvas';
 import { MobileControls } from './components/MobileControls';
@@ -81,6 +81,48 @@ const App: React.FC = () => {
     return calculateTileType(Math.floor(x), Math.floor(y));
   }, []);
 
+  const showMessage = (msg: string) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(''), 3000);
+  };
+
+  const getVillageName = useCallback((cx: number, cy: number) => {
+      const lang = gameState.current.settings.language;
+      const names = VILLAGE_NAMES[lang];
+      const hash = Math.abs((cx * 31) ^ cy);
+      return names[hash % names.length];
+  }, []);
+
+  const addItemToInventory = useCallback((itemProto: Item, quantity: number) => {
+    const engine = gameState.current;
+    const inventory = engine.inventory;
+    const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
+
+    const existing = inventory.find(i => i.id === itemProto.id && i.stackable && (i.quantity < (i.maxStack || 99)));
+    
+    if (existing) {
+      existing.quantity += quantity;
+    } else {
+      if (inventory.length >= MAX_INVENTORY_SLOTS) {
+        showMessage(t('inv_full'));
+        return false;
+      }
+
+      const newUniqueId = `${itemProto.id}-${Math.random()}`;
+      const newItem = { ...itemProto, quantity, uniqueId: newUniqueId };
+      inventory.push(newItem);
+
+      const autoSlotTypes = ['tool', 'weapon', 'food', 'structure'];
+      if (autoSlotTypes.includes(newItem.type)) {
+          const emptySlotIdx = engine.quickSlots.findIndex(slot => slot === null);
+          if (emptySlotIdx !== -1) {
+              engine.quickSlots[emptySlotIdx] = newUniqueId;
+          }
+      }
+    }
+    return true;
+  }, []);
+
   const saveSettings = useCallback(() => {
     localStorage.setItem(SETTINGS_SAVE_KEY, JSON.stringify(gameState.current.settings));
     localStorage.setItem('embers_character_config', JSON.stringify(gameState.current.playerStats.character));
@@ -139,6 +181,37 @@ const App: React.FC = () => {
     }
   };
 
+  const handleGift = useCallback((entityId: string) => {
+    const engine = gameState.current;
+    const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
+    
+    const giftableIds = ['berry', 'meat_cooked', 'flower', 'berry_seed'];
+    const giftItem = engine.inventory.find(i => giftableIds.includes(i.id));
+    
+    if (giftItem) {
+        giftItem.quantity--;
+        if (giftItem.quantity <= 0) {
+            engine.quickSlots = engine.quickSlots.map(uid => uid === giftItem.uniqueId ? null : uid);
+            engine.inventory = engine.inventory.filter(i => i.uniqueId !== giftItem.uniqueId);
+        }
+        
+        const entity = engine.entities.find(e => e.id === entityId);
+        if (entity) {
+            spawnParticles(entity.x, entity.y - 1, 'heart', 10, '#f43f5e', 1.2);
+            showMessage(`${t('give_gift')}: ${t(giftItem.id)}!`);
+            addFloatingText(entity.x, entity.y, "❤️", "#f43f5e");
+            SoundManager.playUI('fanfare');
+            engine.playerStats.xp += 50;
+            checkLevelUp(engine.playerStats);
+        }
+        setUiState(prev => prev + 1);
+        return true;
+    } else {
+        showMessage(t('no_gifts'));
+        return false;
+    }
+  }, [checkLevelUp]);
+
   const handleAction = useCallback((action: 'use' | 'reorder' | 'equip' | 'assign_quickslot' | 'place' | 'repair' | 'repair_all' | 'fire', data: any) => {
     const engine = gameState.current;
     const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
@@ -157,7 +230,6 @@ const App: React.FC = () => {
                 if (idx > -1) {
                     engine.inventory[idx].quantity--;
                     if (engine.inventory[idx].quantity <= 0) {
-                      // Remove from quickslots too if quantity is zero
                       engine.quickSlots = engine.quickSlots.map(uid => uid === item.uniqueId ? null : uid);
                       engine.inventory.splice(idx, 1);
                     }
@@ -174,10 +246,8 @@ const App: React.FC = () => {
         }
     } else if (action === 'assign_quickslot') {
         const { uniqueId, slotIdx } = data;
-        // Check if item exists in inventory
         const item = engine.inventory.find(i => i.uniqueId === uniqueId);
         if (item) {
-          // Clear any previous assignment of this item to avoid duplicates
           engine.quickSlots = engine.quickSlots.map(uid => uid === uniqueId ? null : uid);
           engine.quickSlots[slotIdx] = uniqueId;
           SoundManager.playUI('click');
@@ -185,9 +255,10 @@ const App: React.FC = () => {
     } else if (action === 'fire') {
         const arrowIdx = engine.inventory.findIndex(i => i.id === 'arrow');
         if (arrowIdx > -1) {
-            engine.inventory[arrowIdx].quantity--;
-            if (engine.inventory[arrowIdx].quantity <= 0) {
-              engine.quickSlots = engine.quickSlots.map(uid => uid === engine.inventory[arrowIdx].uniqueId ? null : uid);
+            const targetItem = engine.inventory[arrowIdx];
+            targetItem.quantity--;
+            if (targetItem.quantity <= 0) {
+              engine.quickSlots = engine.quickSlots.map(uid => uid === targetItem.uniqueId ? null : uid);
               engine.inventory.splice(arrowIdx, 1);
             }
             const dx = data.tx - engine.playerPos.x, dy = data.ty - engine.playerPos.y;
@@ -234,11 +305,6 @@ const App: React.FC = () => {
     }
   }, [handleAction]);
 
-  const showMessage = (msg: string) => {
-    setMessage(msg);
-    setTimeout(() => setMessage(''), 3000);
-  };
-
   const handleInteract = useCallback((entityId: string | null) => {
     const engine = gameState.current;
     const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
@@ -251,10 +317,7 @@ const App: React.FC = () => {
       if (entity.type === 'loot_bag') {
           if (entity.storage && entity.storage.length > 0) {
               entity.storage.forEach(itemToAdd => {
-                  const existing = engine.inventory.find(i => i.id === itemToAdd.id && i.stackable && (i.quantity < (i.maxStack || 99)));
-                  if (existing) existing.quantity += itemToAdd.quantity;
-                  else if (engine.inventory.length < MAX_INVENTORY_SLOTS) engine.inventory.push({ ...itemToAdd, uniqueId: `${itemToAdd.id}-${Math.random()}` });
-                  else showMessage(t('inv_full'));
+                  addItemToInventory(itemToAdd, itemToAdd.quantity);
                   addFloatingText(engine.playerPos.x, engine.playerPos.y, `+${itemToAdd.quantity} ${t(itemToAdd.id)}`, '#fbbf24');
               });
               SoundManager.playUI('click');
@@ -285,14 +348,9 @@ const App: React.FC = () => {
         } else if (entity.growthStage === 3) {
           entity.growthStage = undefined;
           entity.growthTimer = undefined;
-          const harvest = { ...ITEMS.berry, quantity: 3 };
-          const seedHarvest = { ...ITEMS.berry_seed, quantity: 1 };
           
-          [harvest, seedHarvest].forEach(proto => {
-            const existing = engine.inventory.find(i => i.id === proto.id && (i.quantity < (i.maxStack || 99)));
-            if (existing) existing.quantity += proto.quantity;
-            else if (engine.inventory.length < MAX_INVENTORY_SLOTS) engine.inventory.push({ ...proto, uniqueId: `${proto.id}-${Math.random()}` });
-          });
+          addItemToInventory(ITEMS.berry, 3);
+          addItemToInventory(ITEMS.berry_seed, 1);
 
           showMessage(t('harvested'));
           SoundManager.play('eat');
@@ -338,8 +396,8 @@ const App: React.FC = () => {
         const rawMeat = inventory.find(i => i.id === 'meat_raw');
         const berries = inventory.find(i => i.id === 'berry');
         let cookedItemProto: Item | null = null, consumedItem: Item | null = null;
-        if (rawMeat) { consumedItem = rawMeat; cookedItemProto = { ...ITEMS.meat_cooked }; }
-        else if (berries) { consumedItem = berries; cookedItemProto = { ...ITEMS.berry_cooked }; }
+        if (rawMeat) { consumedItem = rawMeat; cookedItemProto = ITEMS.meat_cooked; }
+        else if (berries) { consumedItem = berries; cookedItemProto = ITEMS.berry_cooked; }
 
         if (consumedItem && cookedItemProto) {
           consumedItem.quantity--;
@@ -348,15 +406,7 @@ const App: React.FC = () => {
             inventory.splice(inventory.indexOf(consumedItem), 1);
           }
           
-          const existing = inventory.find(i => i.id === cookedItemProto!.id && i.quantity < (i.maxStack || 99));
-          if (existing) {
-            existing.quantity++;
-          } else if (inventory.length < MAX_INVENTORY_SLOTS) {
-            inventory.push({ ...cookedItemProto, quantity: 1, uniqueId: `${cookedItemProto.id}-${Math.random()}` });
-          } else {
-            showMessage(t('inv_full'));
-            return;
-          }
+          addItemToInventory(cookedItemProto, 1);
           
           showMessage(t('crafted') + " " + t(cookedItemProto.id));
           addFloatingText(entity.x, entity.y, t(cookedItemProto.id), '#fbbf24');
@@ -396,7 +446,7 @@ const App: React.FC = () => {
           setUiState(prev => prev + 1);
         }
     }
-  }, [getTileAt, checkLevelUp, handleAction]);
+  }, [getTileAt, checkLevelUp, handleAction, addItemToInventory]);
 
   const handleGather = useCallback((entityId: string) => {
     const engine = gameState.current;
@@ -426,10 +476,7 @@ const App: React.FC = () => {
       addFloatingText(targetEntity.x, targetEntity.y, `+${gatherInfo.quantity} ${t(gatherInfo.item)}`, '#fbbf24');
       
       const proto = ITEMS[gatherInfo.item];
-      const existingItem = inventory.find(i => i.id === proto.id && i.stackable && (i.quantity < (i.maxStack || 99)));
-      if (existingItem) existingItem.quantity += gatherInfo.quantity;
-      else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push({ ...proto, quantity: gatherInfo.quantity, uniqueId: `${proto.id}-${Math.random()}` });
-      else showMessage(t('inv_full'));
+      addItemToInventory(proto, gatherInfo.quantity);
     }
     
     playerStats.xp += GATHER_XP_PER_HIT; checkLevelUp(playerStats);
@@ -452,7 +499,7 @@ const App: React.FC = () => {
       spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo?.particle as Particle['type'] || 'dust', 10, '#a16207', 1.0);
     }
     setUiState(prev => prev + 1);
-  }, [checkLevelUp]);
+  }, [checkLevelUp, addItemToInventory]);
 
   useEffect(() => {
     const savedSettings = localStorage.getItem(SETTINGS_SAVE_KEY);
@@ -527,16 +574,42 @@ const App: React.FC = () => {
     engine.time += dt * 5; if (engine.time >= 2400) engine.time = 0;
     engine.isDay = engine.time > 600 && engine.time < 1800;
     
-    // Check if in village (for Shop)
     const nearVillage = engine.entities.some(e => (e.type === 'shopkeeper' || e.type === 'house_village') && Math.sqrt((e.x - engine.playerPos.x)**2 + (e.y - engine.playerPos.y)**2) < 15);
     if (nearVillage !== isInVillage) setIsInVillage(nearVillage);
 
     if (engine.playerStats.interactionAnim > 0) engine.playerStats.interactionAnim = Math.max(0, engine.playerStats.interactionAnim - dt);
     
+    for (let k = engine.floatingTexts.length - 1; k >= 0; k--) {
+      const ft = engine.floatingTexts[k];
+      ft.life -= dt;
+      ft.y += ft.vy * dt;
+      if (ft.life <= 0) engine.floatingTexts.splice(k, 1);
+    }
+
+    for (let j = engine.particles.length - 1; j >= 0; j--) {
+      const p = engine.particles[j];
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.life <= 0) engine.particles.splice(j, 1);
+    }
+
+    for (let l = engine.projectiles.length - 1; l >= 0; l--) {
+      const p = engine.projectiles[l];
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.life <= 0) engine.projectiles.splice(l, 1);
+    }
+
+    if (engine.clickMarker) {
+      engine.clickMarker.life -= dt * 2;
+      if (engine.clickMarker.life <= 0) engine.clickMarker = null;
+    }
+
     for (let i = engine.entities.length - 1; i >= 0; i--) {
       const ent = engine.entities[i];
       
-      // Farming Logic
       if (ent.type === 'farm_plot' && ent.growthStage && ent.growthStage < 3) {
         if (!ent.growthTimer) ent.growthTimer = 3000;
         ent.growthTimer -= dt * 1000;
@@ -558,31 +631,106 @@ const App: React.FC = () => {
           continue;
       }
       
-      // Animal/Villager AI
+      // ANIMAL & VILLAGER AI
       if ((ent.type === 'deer' || ent.type === 'rabbit' || ent.type === 'villager')) {
           if (!ent.aiState) ent.aiState = 'idle';
           if (!ent.lastAiTick) ent.lastAiTick = now;
           const isVillager = ent.type === 'villager';
-          const wanderTime = isVillager ? 5000 : 3000;
-          if (ent.aiState === 'idle' && now - ent.lastAiTick > wanderTime + Math.random() * 4000) {
-              ent.aiState = isVillager ? 'wandering' : 'grazing'; 
-              const wanderDist = isVillager ? 4 : 8;
-              ent.targetX = ent.x + (Math.random() - 0.5) * wanderDist; 
-              ent.targetY = ent.y + (Math.random() - 0.5) * wanderDist;
-              ent.facing = ent.targetX > ent.x ? 'right' : 'left'; ent.lastAiTick = now;
-          } else if (ent.aiState === 'grazing' || ent.aiState === 'wandering' || ent.aiState === 'fleeing') {
-              const dx = ent.targetX! - ent.x, dy = ent.targetY! - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
-              if (dist < 0.2) { ent.aiState = 'idle'; ent.lastAiTick = now; }
-              else { 
-                  const speed = (ent.type === 'rabbit' ? 3 : ent.type === 'villager' ? 1.5 : 2) * (ent.aiState === 'fleeing' ? 3 : 1);
-                  const nextX = ent.x + (dx/dist)*speed*dt, nextY = ent.y + (dy/dist)*speed*dt;
-                  if (getTileAt(nextX, nextY) !== 'water') { ent.x = nextX; ent.y = nextY; } else { ent.aiState = 'idle'; ent.lastAiTick = now; }
+          const wanderTime = isVillager ? 6000 : 3000;
+
+          if (isVillager) {
+              // VILLAGER AI LOGIC
+              if (ent.aiState === 'idle') {
+                if (now - ent.lastAiTick > wanderTime + Math.random() * 5000) {
+                    // Decide: Wander locally or Travel to next village?
+                    const r = Math.random();
+                    if (r < 0.2 && ent.homeVillage) {
+                        // Picking a neighboring target village
+                        const neighbors = [
+                            { cx: ent.homeVillage.cx + 10, cy: ent.homeVillage.cy },
+                            { cx: ent.homeVillage.cx - 10, cy: ent.homeVillage.cy },
+                            { cx: ent.homeVillage.cx, cy: ent.homeVillage.cy + 10 },
+                            { cx: ent.homeVillage.cx, cy: ent.homeVillage.cy - 10 }
+                        ];
+                        ent.targetVillage = neighbors[Math.floor(Math.random() * neighbors.length)];
+                        ent.aiState = 'traveling';
+                        // Move to road center first
+                        const roadWorldCenterLocal = 8.5;
+                        const alongRoad = ent.targetVillage.cx !== ent.homeVillage.cx; // True if horizontal move
+                        ent.targetX = alongRoad ? ent.x : (ent.homeVillage.cx * CHUNK_SIZE + roadWorldCenterLocal);
+                        ent.targetY = alongRoad ? (ent.homeVillage.cy * CHUNK_SIZE + roadWorldCenterLocal) : ent.y;
+                    } else {
+                        ent.aiState = 'wandering';
+                        // Keep within village bounds (roughly 8-tile radius from center)
+                        const centerX = (ent.homeVillage?.cx || 0) * CHUNK_SIZE + 8.5;
+                        const centerY = (ent.homeVillage?.cy || 0) * CHUNK_SIZE + 8.5;
+                        ent.targetX = centerX + (Math.random() - 0.5) * 12;
+                        ent.targetY = centerY + (Math.random() - 0.5) * 12;
+                    }
+                    ent.lastAiTick = now;
+                }
+              } else if (ent.aiState === 'wandering') {
+                  const dx = ent.targetX! - ent.x, dy = ent.targetY! - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
+                  if (dist < 0.3) { ent.aiState = 'idle'; ent.lastAiTick = now; }
+                  else {
+                      const speed = 1.8;
+                      ent.x += (dx/dist)*speed*dt; ent.y += (dy/dist)*speed*dt;
+                      ent.facing = dx > 0 ? 'right' : 'left';
+                  }
+              } else if (ent.aiState === 'traveling') {
+                  if (!ent.targetVillage) { ent.aiState = 'idle'; return; }
+                  const targetX = ent.targetVillage.cx * CHUNK_SIZE + 8.5;
+                  const targetY = ent.targetVillage.cy * CHUNK_SIZE + 8.5;
+                  
+                  const dx = targetX - ent.x, dy = targetY - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
+                  if (dist < 0.5) {
+                      // Arrived at target village! Swap home and idle
+                      ent.homeVillage = ent.targetVillage;
+                      ent.targetVillage = undefined;
+                      ent.aiState = 'idle';
+                      ent.lastAiTick = now;
+                  } else {
+                      // Alignment step: villagers favor road centers
+                      const speed = 2.5;
+                      const roadX = Math.floor(ent.x / CHUNK_SIZE) * CHUNK_SIZE + 8.5;
+                      const roadY = Math.floor(ent.y / CHUNK_SIZE) * CHUNK_SIZE + 8.5;
+
+                      // Move along the major axis of the road
+                      if (Math.abs(targetX - ent.x) > 0.5) {
+                          // Horizontal road movement
+                          ent.x += (targetX > ent.x ? 1 : -1) * speed * dt;
+                          // Smooth alignment to road Y
+                          ent.y += (roadY - ent.y) * 2 * dt;
+                          ent.facing = targetX > ent.x ? 'right' : 'left';
+                      } else {
+                          // Vertical road movement
+                          ent.y += (targetY > ent.y ? 1 : -1) * speed * dt;
+                          // Smooth alignment to road X
+                          ent.x += (roadX - ent.x) * 2 * dt;
+                          ent.facing = targetX > ent.x ? 'right' : 'left';
+                      }
+                  }
+              }
+          } else {
+              // ANIMAL AI LOGIC (Deer, Rabbit)
+              if (ent.aiState === 'idle' && now - ent.lastAiTick > wanderTime + Math.random() * 4000) {
+                  ent.aiState = 'grazing'; 
+                  ent.targetX = ent.x + (Math.random() - 0.5) * 8; 
+                  ent.targetY = ent.y + (Math.random() - 0.5) * 8;
+                  ent.facing = ent.targetX > ent.x ? 'right' : 'left'; ent.lastAiTick = now;
+              } else if (ent.aiState === 'grazing' || ent.aiState === 'fleeing') {
+                  const dx = ent.targetX! - ent.x, dy = ent.targetY! - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
+                  if (dist < 0.2) { ent.aiState = 'idle'; ent.lastAiTick = now; }
+                  else { 
+                      const speed = (ent.type === 'rabbit' ? 3 : 2) * (ent.aiState === 'fleeing' ? 3 : 1);
+                      const nextX = ent.x + (dx/dist)*speed*dt, nextY = ent.y + (dy/dist)*speed*dt;
+                      if (getTileAt(nextX, nextY) !== 'water') { ent.x = nextX; ent.y = nextY; } else { ent.aiState = 'idle'; ent.lastAiTick = now; }
+                  }
               }
           }
       }
     }
 
-    // Player Movement
     let dx = 0, dy = 0;
     if (keys['w'] || keys['arrowup']) dy -= 1; if (keys['s'] || keys['arrowdown']) dy += 1;
     if (keys['a'] || keys['arrowleft']) dx -= 1; if (keys['d'] || keys['arrowright']) dx += 1;
@@ -603,7 +751,6 @@ const App: React.FC = () => {
     engine.playerStats.hunger = Math.max(0, engine.playerStats.hunger - 0.05 * dt);
     engine.playerStats.thirst = Math.max(0, engine.playerStats.thirst - 0.08 * dt);
     
-    // Cleanup of Projectiles, Particles, and Chunks
     const chunkX = Math.floor(engine.playerPos.x / CHUNK_SIZE), chunkY = Math.floor(engine.playerPos.y / CHUNK_SIZE);
     for(let cx = chunkX - 1; cx <= chunkX + 1; cx++) for(let cy = chunkY - 1; cy <= chunkY + 1; cy++) {
         const key = `${cx},${cy}`; if (!engine.chunks[key]) engine.chunks[key] = generateChunk(cx, cy);
@@ -612,21 +759,42 @@ const App: React.FC = () => {
 
   const generateChunk = (cx: number, cy: number): TileType[][] => {
       const chunk: TileType[][] = [];
-      const isVillageChunk = (cx % 10 === 0 && cy % 10 === 0) || (cx === -15 && cy === -15);
+      const isRoadChunkX = cx % 10 === 0;
+      const isRoadChunkY = cy % 10 === 0;
+      const isVillageChunk = isRoadChunkX && isRoadChunkY;
 
       for(let x=0; x<CHUNK_SIZE; x++) {
           chunk[x] = [];
           for(let y=0; y<CHUNK_SIZE; y++) {
               const wx = cx * CHUNK_SIZE + x, wy = cy * CHUNK_SIZE + y;
-              chunk[x][y] = calculateTileType(wx, wy);
-
+              
+              const isRoad = (isRoadChunkX && x >= 7 && x <= 9) || (isRoadChunkY && y >= 7 && y <= 9);
+              
               if (isVillageChunk && x > 4 && x < 12 && y > 4 && y < 12) {
                   chunk[x][y] = 'stone';
                   if (x === 8 && y === 8) gameState.current.entities.push({ id: `shop-${cx}-${cy}`, x: wx + 0.5, y: wy + 0.5, type: 'shopkeeper', health: 1000, maxHealth: 1000 });
                   else if ((x === 6 || x === 10) && (y === 6 || y === 10)) gameState.current.entities.push({ id: `h-${cx}-${cy}-${x}-${y}`, x: wx + 0.5, y: wy + 0.5, type: 'house_village', health: 500, maxHealth: 500 });
-                  else if (Math.random() < 0.1) gameState.current.entities.push({ id: `v-${cx}-${cy}-${x}-${y}`, x: wx + 0.5, y: wy + 0.5, type: 'villager', health: 100, maxHealth: 100, aiState: 'idle' });
+                  else if (Math.random() < 0.1) {
+                      gameState.current.entities.push({ 
+                          id: `v-${cx}-${cy}-${x}-${y}`, 
+                          x: wx + 0.5, 
+                          y: wy + 0.5, 
+                          type: 'villager', 
+                          health: 100, 
+                          maxHealth: 100, 
+                          aiState: 'idle',
+                          homeVillage: { cx, cy }
+                      });
+                  }
                   continue;
               }
+
+              if (isRoad) {
+                  chunk[x][y] = 'road_tile';
+                  continue;
+              }
+
+              chunk[x][y] = calculateTileType(wx, wy);
 
               if (chunk[x][y] === 'grass' && Math.random() < 0.05) {
                 const types: EntityType[] = ['tree_oak', 'flower', 'grass_clump', 'rock_standard', 'deer', 'rabbit', 'bush_berry'];
@@ -639,25 +807,22 @@ const App: React.FC = () => {
   };
 
   const startNewGame = () => {
-    gameState.current = { 
-      ...gameState.current, 
-      playerPos: { x: 0, y: 0 }, 
-      playerStats: { ...INITIAL_STATS, character: gameState.current.playerStats.character }, 
-      inventory: [
-        { ...ITEMS.axe, uniqueId: 'axe-start' }, 
-        { ...ITEMS.hoe, uniqueId: 'hoe-start' }, 
-        { ...ITEMS.wood, quantity: 10, uniqueId: 'wood-start' }
-      ], 
-      quickSlots: Array(9).fill(null),
-      entities: [], 
-      projectiles: [], 
-      particles: [], 
-      chunks: {}, 
-      time: 800, 
-      gameStarted: true, 
-      isPaused: false, 
-      isResting: false 
-    };
+    gameState.current.playerPos = { x: 0, y: 0 };
+    gameState.current.playerStats = { ...INITIAL_STATS, character: gameState.current.playerStats.character };
+    gameState.current.inventory = [];
+    gameState.current.quickSlots = Array(9).fill(null);
+    gameState.current.entities = [];
+    gameState.current.projectiles = [];
+    gameState.current.particles = [];
+    gameState.current.floatingTexts = [];
+    gameState.current.chunks = {};
+    gameState.current.time = 800;
+    gameState.current.gameStarted = true;
+    
+    addItemToInventory(ITEMS.axe, 1);
+    addItemToInventory(ITEMS.hoe, 1);
+    addItemToInventory(ITEMS.wood, 10);
+    
     setIsDead(false); setIsResting(false); setActiveModal('none'); setGameStarted(true);
   };
 
@@ -695,9 +860,7 @@ const App: React.FC = () => {
         if (recipe.output.type === 'structure') {
             handleAction('place', { x: engine.playerPos.x + 1, y: engine.playerPos.y + 1, type: recipe.output.placeEntity! });
         } else {
-            const existing = engine.inventory.find(i => i.id === recipe.output.id && i.quantity < (i.maxStack || 99));
-            if (existing) existing.quantity += recipe.output.quantity; 
-            else engine.inventory.push({ ...recipe.output, uniqueId: `${recipe.output.id}-${Math.random()}` });
+            addItemToInventory(recipe.output, recipe.output.quantity);
         }
         SoundManager.play('craft'); 
         engine.playerStats.xp += 20; 
@@ -715,7 +878,6 @@ const App: React.FC = () => {
                 <GameCanvas gameState={gameState.current} canvasRef={canvasRef} placingEntityType={placingEntityType} />
                 <HUD stats={gameState.current.playerStats} time={gameState.current.time} message={message} gameState={gameState.current} onAction={handleAction} onZoom={(d) => inputManagerRef.current?.handleWheel({ deltaY: d } as WheelEvent)} onRotate={() => {}} onOpenSettings={() => setActiveModal('settings')} />
                 
-                {/* Fixed position buttons - Top Right */}
                 <div className="absolute top-4 right-4 z-50 flex gap-4">
                     <button onClick={() => setActiveModal(prev => prev === 'inventory' ? 'none' : 'inventory')} className={`w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto ${activeModal === 'inventory' ? 'bg-amber-500/80' : ''}`}>🎒</button>
                     <button onClick={() => setActiveModal(prev => prev === 'crafting' ? 'none' : 'crafting')} className={`w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto ${activeModal === 'crafting' ? 'bg-amber-500/80' : ''}`}>⚒️</button>
@@ -725,7 +887,6 @@ const App: React.FC = () => {
                     }} className={`w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto ${activeModal === 'shop' ? 'bg-amber-500/80' : ''}`}>🪙</button>
                 </div>
 
-                {/* Minimap (Radar) - Bottom Right */}
                 <div className="absolute bottom-4 right-4 z-50 pointer-events-auto">
                     <Minimap gameState={gameState.current} />
                 </div>
@@ -733,9 +894,12 @@ const App: React.FC = () => {
                 {activeModal === 'dialogue' && activeDialogueId && (
                   <DialogueModal 
                     entity={gameState.current.entities.find(e => e.id === activeDialogueId)!}
+                    inventory={gameState.current.inventory}
                     onClose={() => { setActiveModal('none'); setActiveDialogueId(null); }}
                     onTrade={() => { setActiveModal('shop'); }}
+                    onGift={handleGift}
                     language={gameState.current.settings.language}
+                    villageName={getVillageName(Math.floor(gameState.current.playerPos.x / CHUNK_SIZE), Math.floor(gameState.current.playerPos.y / CHUNK_SIZE))}
                   />
                 )}
 

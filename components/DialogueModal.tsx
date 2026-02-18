@@ -1,13 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
-import { Entity, Language } from '../types';
+import { Entity, Language, Item } from '../types';
 import { VILLAGER_DIALOGUE, TRANSLATIONS } from '../constants';
 
 interface Props {
   entity: Entity;
+  inventory: Item[];
   onClose: () => void;
   onTrade?: () => void;
+  onGift?: (entityId: string) => boolean;
   language: Language;
+  villageName?: string;
 }
 
 const NPC_NAMES: Record<string, string[]> = {
@@ -15,11 +18,10 @@ const NPC_NAMES: Record<string, string[]> = {
   tr: ["Alper", "Boran", "Cihan", "Defne", "Enes", "Funda", "Gökhan", "Hale"]
 };
 
-export const DialogueModal: React.FC<Props> = ({ entity, onClose, onTrade, language }) => {
+export const DialogueModal: React.FC<Props> = ({ entity, inventory, onClose, onTrade, onGift, language, villageName }) => {
   const t = (key: string) => TRANSLATIONS[language][key] || key;
   const isShopkeeper = entity.type === 'shopkeeper';
   
-  // Use entity.id as seed for deterministic name
   const nameParts = entity.id.split('-');
   const nameIndex = parseInt(nameParts[nameParts.length - 1] || '0') % NPC_NAMES[language].length;
   const npcName = NPC_NAMES[language][nameIndex] || NPC_NAMES[language][0];
@@ -34,10 +36,11 @@ export const DialogueModal: React.FC<Props> = ({ entity, onClose, onTrade, langu
     }
   }, [lines.length, isShopkeeper]);
 
-  // Capturing events at the backdrop level
   const handleBackdropClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
+
+  const [hasGifted, setHasGifted] = useState(false);
 
   return (
     <div 
@@ -50,10 +53,8 @@ export const DialogueModal: React.FC<Props> = ({ entity, onClose, onTrade, langu
         onClick={(e) => e.stopPropagation()}
       >
         
-        {/* Decorative corner element */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-bl-full blur-2xl pointer-events-none" />
 
-        {/* NPC Portrait area */}
         <div className="flex-shrink-0 w-32 h-32 md:w-48 md:h-48 bg-black/40 rounded-[2.5rem] border border-white/10 flex items-center justify-center shadow-inner relative overflow-hidden group">
             <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <span className="text-6xl md:text-8xl relative z-10 drop-shadow-2xl">
@@ -61,16 +62,18 @@ export const DialogueModal: React.FC<Props> = ({ entity, onClose, onTrade, langu
             </span>
         </div>
 
-        {/* Text area */}
         <div className="flex-1 flex flex-col justify-between py-2">
             <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-3">
-                    <span className="text-amber-500 font-black tracking-widest text-[14px] uppercase">{isShopkeeper ? t('shopkeeper') : t('villager')}</span>
+                    <span className="text-amber-500 font-black tracking-widest text-[14px] uppercase">
+                        {isShopkeeper ? t('shopkeeper') : t('villager')}
+                        {villageName && <span className="text-white/30 ml-2">@ {villageName}</span>}
+                    </span>
                     <div className="h-px flex-1 bg-white/10" />
                 </div>
                 <h3 className="text-3xl md:text-4xl font-black text-white tracking-tighter uppercase">{npcName}</h3>
                 <p className="text-lg md:text-xl text-white/70 italic font-medium leading-relaxed mt-4 max-w-2xl">
-                    "{currentLine}"
+                    "{hasGifted ? t('gift_thanks') : currentLine}"
                 </p>
             </div>
 
@@ -81,6 +84,18 @@ export const DialogueModal: React.FC<Props> = ({ entity, onClose, onTrade, langu
                         className="px-8 py-4 bg-amber-500 hover:bg-amber-400 text-stone-950 font-black rounded-2xl uppercase tracking-widest text-[12px] shadow-[0_10px_30px_rgba(245,158,11,0.3)] transition-all active:scale-95"
                     >
                         💰 {t('buy')} / {t('sell')}
+                    </button>
+                )}
+                {!isShopkeeper && onGift && (
+                    <button 
+                        disabled={hasGifted}
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if(onGift(entity.id)) setHasGifted(true); 
+                        }}
+                        className={`px-8 py-4 ${hasGifted ? 'bg-emerald-500/50 cursor-not-allowed' : 'bg-rose-500 hover:bg-rose-400'} text-white font-black rounded-2xl uppercase tracking-widest text-[12px] shadow-[0_10px_30px_rgba(244,63,94,0.3)] transition-all active:scale-95`}
+                    >
+                        🎁 {hasGifted ? 'DONE!' : t('give_gift')}
                     </button>
                 )}
                 <button 
