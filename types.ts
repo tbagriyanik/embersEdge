@@ -40,6 +40,7 @@ export interface Recipe {
   output: Item;
   ingredients: { [key: string]: number };
   levelRequired: number;
+  workbenchLevelRequired?: number;
   requiresWorkbench?: boolean;
   category: 'tools' | 'buildings' | 'survival' | 'trade';
 }
@@ -61,6 +62,7 @@ export interface Entity {
   type: EntityType;
   health: number;
   maxHealth: number;
+  level?: number;
   lastMove?: number;
   targetX?: number;
   targetY?: number;

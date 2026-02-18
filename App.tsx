@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GameState, PlayerStats, Entity, Particle, Projectile, FloatingText, WeatherState, Item, TileType, GameSettings, WeatherType, EntityType } from './types';
-import { INITIAL_STATS, TILE_WIDTH, TILE_HEIGHT, ITEMS, RECIPES, CHUNK_SIZE, SAVE_KEY, SETTINGS_SAVE_KEY, TRANSLATIONS, GATHER_BASE_DAMAGE, GATHER_XP_PER_HIT, GATHER_ITEM_QUANTITY, GATHER_TOOL_REQUIREMENTS, MAX_INVENTORY_SLOTS, GATHER_HAND_DAMAGE, GATHER_TOOL_BOOST, VILLAGER_DIALOGUE, VILLAGE_NAMES } from './constants';
+import { INITIAL_STATS, TILE_WIDTH, TILE_HEIGHT, ITEMS, RECIPES, CHUNK_SIZE, SAVE_KEY, SETTINGS_SAVE_KEY, TRANSLATIONS, GATHER_BASE_DAMAGE, GATHER_XP_PER_HIT, GATHER_ITEM_QUANTITY, GATHER_TOOL_REQUIREMENTS, MAX_INVENTORY_SLOTS, GATHER_HAND_DAMAGE, GATHER_TOOL_BOOST, VILLAGER_DIALOGUE, VILLAGE_NAMES, STRUCTURE_UPGRADES } from './constants';
 import { HUD } from './components/HUD';
 import { GameCanvas } from './components/GameCanvas';
 import { MobileControls } from './components/MobileControls';
@@ -26,13 +26,15 @@ export const calculateTileType = (x: number, y: number): TileType => {
 
 const App: React.FC = () => {
   const [gameStarted, setGameStarted] = useState(false);
-  const [activeModal, setActiveModal] = useState<'none' | 'inventory' | 'crafting' | 'shop' | 'settings' | 'dialogue'>('none');
+  const [activeModal, setActiveModal] = useState<'none' | 'inventory' | 'crafting' | 'shop' | 'settings' | 'dialogue' | 'selection'>('none');
   const [activeDialogueId, setActiveDialogueId] = useState<string | null>(null);
+  const [selectionMenu, setSelectionMenu] = useState<{ title: string, options: { label: string, action: () => void, icon: string, disabled?: boolean, subtext?: string }[] } | null>(null);
   const [isDead, setIsDead] = useState(false);
   const [isNearWorkbench, setIsNearWorkbench] = useState(false);
   const [isResting, setIsResting] = useState(false);
   const [placingEntityType, setPlacingEntityType] = useState<EntityType | null>(null);
   const [isInVillage, setIsInVillage] = useState(false);
+  const [currentWorkbenchLevel, setCurrentWorkbenchLevel] = useState(1);
   
   const gameState = useRef<GameState>({
     playerPos: { x: 0, y: 0 },
@@ -85,6 +87,15 @@ const App: React.FC = () => {
     setMessage(msg);
     setTimeout(() => setMessage(''), 3000);
   };
+
+  const isLocationInVillage = useCallback((wx: number, wy: number) => {
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cy = Math.floor(wy / CHUNK_SIZE);
+    const lx = ((Math.floor(wx) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const ly = ((Math.floor(wy) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const isVillageChunk = (cx % 10 === 0) && (cy % 10 === 0);
+    return isVillageChunk && lx > 4 && lx < 12 && ly > 4 && ly < 12;
+  }, []);
 
   const getVillageName = useCallback((cx: number, cy: number) => {
       const lang = gameState.current.settings.language;
@@ -212,6 +223,52 @@ const App: React.FC = () => {
     }
   }, [checkLevelUp]);
 
+  const handleUpgrade = useCallback((entityId: string) => {
+      const engine = gameState.current;
+      const entity = engine.entities.find(e => e.id === entityId);
+      const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
+      if (!entity) return;
+
+      const currentLvl = entity.level || 1;
+      const nextLvl = currentLvl + 1;
+      const costConfig = STRUCTURE_UPGRADES[entity.type]?.[nextLvl];
+
+      if (!costConfig) {
+          showMessage("Max level reached!");
+          return;
+      }
+
+      // Check ingredients
+      const canUpgrade = Object.entries(costConfig).every(([id, qty]) => {
+          const item = engine.inventory.find(i => i.id === id);
+          return item && item.quantity >= (qty as number);
+      });
+
+      if (canUpgrade) {
+          Object.entries(costConfig).forEach(([id, qty]) => {
+              const item = engine.inventory.find(i => i.id === id);
+              if (item) {
+                  item.quantity -= (qty as number);
+                  if (item.quantity <= 0) {
+                      engine.quickSlots = engine.quickSlots.map(uid => uid === item.uniqueId ? null : uid);
+                      engine.inventory = engine.inventory.filter(i => i.uniqueId !== item.uniqueId);
+                  }
+              }
+          });
+          entity.level = nextLvl;
+          entity.maxHealth += 100;
+          entity.health = entity.maxHealth;
+          SoundManager.playUI('fanfare');
+          addFloatingText(entity.x, entity.y, t('upgraded'), '#fbbf24');
+          spawnParticles(entity.x, entity.y, 'spark', 12, '#fbbf24', 1.5);
+          showMessage(t('upgraded'));
+          setActiveModal('none');
+          setUiState(prev => prev + 1);
+      } else {
+          showMessage(t('inv_full')); // Using inv_full as a proxy for "missing resources" generically here
+      }
+  }, []);
+
   const handleAction = useCallback((action: 'use' | 'reorder' | 'equip' | 'assign_quickslot' | 'place' | 'repair' | 'repair_all' | 'fire', data: any) => {
     const engine = gameState.current;
     const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
@@ -274,6 +331,14 @@ const App: React.FC = () => {
         }
     } else if (action === 'place') {
         const { x, y, type } = data;
+
+        // Restriction check for villages
+        const restrictedInVillage: EntityType[] = ['campfire', 'tent', 'hut', 'workbench'];
+        if (restrictedInVillage.includes(type) && isLocationInVillage(x, y)) {
+            showMessage(t('no_building_village'));
+            return;
+        }
+
         const collisionRadius = 1.2;
         const isSpaceOccupied = engine.entities.some(ent => {
             const dist = Math.sqrt((ent.x - x)**2 + (ent.y - y)**2);
@@ -285,7 +350,7 @@ const App: React.FC = () => {
             return;
         }
 
-        engine.entities.push({ id: Math.random().toString(), x, y, type: type, health: 100, maxHealth: 100 });
+        engine.entities.push({ id: Math.random().toString(), x, y, type: type, health: 100, maxHealth: 100, level: 1 });
         SoundManager.play('build');
         showMessage(t('placed') + " " + t(type));
     } else if (action === 'reorder') {
@@ -294,7 +359,7 @@ const App: React.FC = () => {
         engine.inventory.splice(toIdx, 0, movedItem);
     }
     setUiState(prev => prev + 1);
-  }, []);
+  }, [isLocationInVillage]);
 
   const handleQuickSlotActivated = useCallback((slotIndex: number) => {
     const engine = gameState.current;
@@ -360,7 +425,20 @@ const App: React.FC = () => {
         return;
       }
 
-      if (entity.type === 'workbench') setActiveModal('crafting');
+      if (entity.type === 'workbench') {
+          const lvl = entity.level || 1;
+          const upgradeAvailable = STRUCTURE_UPGRADES.workbench[lvl + 1];
+          const upgradeText = upgradeAvailable ? `${t('upgrade')} (Lvl ${lvl + 1})` : "Max Level";
+          
+          setSelectionMenu({
+              title: "Workbench (Lvl " + lvl + ")",
+              options: [
+                  { label: t('crafting'), icon: '⚒️', action: () => { setCurrentWorkbenchLevel(lvl); setActiveModal('crafting'); } },
+                  { label: upgradeText, icon: '⬆️', disabled: !upgradeAvailable, subtext: upgradeAvailable ? Object.entries(upgradeAvailable).map(([k, v]) => `${v} ${t(k)}`).join(', ') : '', action: () => handleUpgrade(entity.id) }
+              ]
+          });
+          setActiveModal('selection');
+      }
       else if (entity.type === 'shopkeeper' || entity.type === 'villager') {
           setActiveDialogueId(entityId);
           setActiveModal('dialogue');
@@ -373,24 +451,38 @@ const App: React.FC = () => {
         SoundManager.play('eat');
         setUiState(prev => prev + 1);
       } else if (entity.type === 'tent' || entity.type === 'hut') {
-        setIsResting(true);
-        engine.isResting = true;
-        SoundManager.play('eat');
-        showMessage(t('rest_tent'));
-        
-        setTimeout(() => {
-            const innerEngine = gameState.current;
-            innerEngine.time = (innerEngine.time + 500) % 2400;
-            innerEngine.playerStats.health = Math.min(100, innerEngine.playerStats.health + 50);
-            innerEngine.playerStats.stamina = 100;
-            innerEngine.playerStats.hunger = Math.max(0, innerEngine.playerStats.hunger - 15);
-            innerEngine.playerStats.thirst = Math.max(0, innerEngine.playerStats.thirst - 20);
-            
-            addFloatingText(entity.x, entity.y, `+50 HP / +5 Hours`, '#a855f7');
-            setIsResting(false);
-            engine.isResting = false;
-            setUiState(prev => prev + 1);
-        }, 2000);
+        const lvl = entity.level || 1;
+        const upgradeAvailable = STRUCTURE_UPGRADES.hut[lvl + 1];
+        const upgradeText = upgradeAvailable ? `${t('upgrade')} (Lvl ${lvl + 1})` : "Max Level";
+
+        setSelectionMenu({
+            title: t(entity.type) + " (Lvl " + lvl + ")",
+            options: [
+                { label: t('rest_tent'), icon: '💤', action: () => {
+                    setIsResting(true);
+                    engine.isResting = true;
+                    SoundManager.play('eat');
+                    showMessage(t('rest_tent'));
+                    
+                    setTimeout(() => {
+                        const innerEngine = gameState.current;
+                        innerEngine.time = (innerEngine.time + (500 * lvl)) % 2400;
+                        innerEngine.playerStats.health = Math.min(100, innerEngine.playerStats.health + (50 * lvl));
+                        innerEngine.playerStats.stamina = 100;
+                        innerEngine.playerStats.hunger = Math.max(0, innerEngine.playerStats.hunger - 15);
+                        innerEngine.playerStats.thirst = Math.max(0, innerEngine.playerStats.thirst - 20);
+                        
+                        addFloatingText(entity.x, entity.y, `+${50 * lvl} HP`, '#a855f7');
+                        setIsResting(false);
+                        engine.isResting = false;
+                        setActiveModal('none');
+                        setUiState(prev => prev + 1);
+                    }, 2000);
+                } },
+                { label: upgradeText, icon: '⬆️', disabled: !upgradeAvailable, subtext: upgradeAvailable ? Object.entries(upgradeAvailable).map(([k, v]) => `${v} ${t(k)}`).join(', ') : '', action: () => handleUpgrade(entity.id) }
+            ]
+        });
+        setActiveModal('selection');
       } else if (entity.type === 'campfire') {
         const inventory = engine.inventory;
         const rawMeat = inventory.find(i => i.id === 'meat_raw');
@@ -420,7 +512,7 @@ const App: React.FC = () => {
         const playerPos = engine.playerPos;
         const equippedTool = engine.inventory.find(i => i.id === engine.playerStats.equippedItemId);
         if (equippedTool?.id === 'hoe') {
-          engine.entities.push({ id: `farm-${Math.random()}`, x: Math.floor(playerPos.x) + 0.5, y: Math.floor(playerPos.y) + 0.5, type: 'farm_plot', health: 100, maxHealth: 100 });
+          engine.entities.push({ id: `farm-${Math.random()}`, x: Math.floor(playerPos.x) + 0.5, y: Math.floor(playerPos.y) + 0.5, type: 'farm_plot', health: 100, maxHealth: 100, level: 1 });
           showMessage(t('tilled_soil'));
           SoundManager.play('build');
           return;
@@ -446,7 +538,7 @@ const App: React.FC = () => {
           setUiState(prev => prev + 1);
         }
     }
-  }, [getTileAt, checkLevelUp, handleAction, addItemToInventory]);
+  }, [getTileAt, checkLevelUp, handleAction, addItemToInventory, handleUpgrade]);
 
   const handleGather = useCallback((entityId: string) => {
     const engine = gameState.current;
@@ -625,7 +717,7 @@ const App: React.FC = () => {
           if (gatherInfo) {
               const proto = ITEMS[gatherInfo.item];
               const itemToDrop = { ...proto, quantity: gatherInfo.quantity, uniqueId: `${proto.id}-${Math.random()}` };
-              engine.entities.push({ id: `loot-${Math.random()}`, x: ent.x, y: ent.y, type: 'loot_bag', health: 100, maxHealth: 100, storage: [itemToDrop] });
+              engine.entities.push({ id: `loot-${Math.random()}`, x: ent.x, y: ent.y, type: 'loot_bag', health: 100, maxHealth: 100, storage: [itemToDrop], level: 1 });
           }
           engine.entities.splice(i, 1);
           continue;
@@ -772,8 +864,8 @@ const App: React.FC = () => {
               
               if (isVillageChunk && x > 4 && x < 12 && y > 4 && y < 12) {
                   chunk[x][y] = 'stone';
-                  if (x === 8 && y === 8) gameState.current.entities.push({ id: `shop-${cx}-${cy}`, x: wx + 0.5, y: wy + 0.5, type: 'shopkeeper', health: 1000, maxHealth: 1000 });
-                  else if ((x === 6 || x === 10) && (y === 6 || y === 10)) gameState.current.entities.push({ id: `h-${cx}-${cy}-${x}-${y}`, x: wx + 0.5, y: wy + 0.5, type: 'house_village', health: 500, maxHealth: 500 });
+                  if (x === 8 && y === 8) gameState.current.entities.push({ id: `shop-${cx}-${cy}`, x: wx + 0.5, y: wy + 0.5, type: 'shopkeeper', health: 1000, maxHealth: 1000, level: 1 });
+                  else if ((x === 6 || x === 10) && (y === 6 || y === 10)) gameState.current.entities.push({ id: `h-${cx}-${cy}-${x}-${y}`, x: wx + 0.5, y: wy + 0.5, type: 'house_village', health: 500, maxHealth: 500, level: 1 });
                   else if (Math.random() < 0.1) {
                       gameState.current.entities.push({ 
                           id: `v-${cx}-${cy}-${x}-${y}`, 
@@ -783,7 +875,8 @@ const App: React.FC = () => {
                           health: 100, 
                           maxHealth: 100, 
                           aiState: 'idle',
-                          homeVillage: { cx, cy }
+                          homeVillage: { cx, cy },
+                          level: 1
                       });
                   }
                   continue;
@@ -799,7 +892,7 @@ const App: React.FC = () => {
               if (chunk[x][y] === 'grass' && Math.random() < 0.05) {
                 const types: EntityType[] = ['tree_oak', 'flower', 'grass_clump', 'rock_standard', 'deer', 'rabbit', 'bush_berry'];
                 const t = types[Math.floor(Math.random() * types.length)];
-                gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: t, health: 100, maxHealth: 100 });
+                gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: t, health: 100, maxHealth: 100, level: 1 });
               }
           }
       }
@@ -842,7 +935,7 @@ const App: React.FC = () => {
         const canCraft = Object.entries(recipe.ingredients).every(([id, qty]) => {
             const item = engine.inventory.find(i => i.id === id);
             return item && item.quantity >= (qty as number);
-        });
+        }) && (recipe.workbenchLevelRequired === undefined || currentWorkbenchLevel >= recipe.workbenchLevelRequired);
 
         if (!canCraft) return false;
 
@@ -869,6 +962,35 @@ const App: React.FC = () => {
         return true;
     }
     return false;
+  };
+
+  const SelectionMenuModal = () => {
+      if (!selectionMenu) return null;
+      const t = (key: string) => TRANSLATIONS[gameState.current.settings.language][key] || key;
+      return (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm pointer-events-auto" onClick={() => setActiveModal('none')}>
+              <div className="bg-stone-900 border border-white/20 p-8 rounded-[2rem] w-full max-w-sm flex flex-col gap-6 animate-in zoom-in-95 duration-200 shadow-2xl" onClick={e => e.stopPropagation()}>
+                  <h3 className="text-2xl font-black text-amber-500 uppercase tracking-tighter text-center">{selectionMenu.title}</h3>
+                  <div className="flex flex-col gap-3">
+                      {selectionMenu.options.map((opt, i) => (
+                          <button 
+                            key={i} 
+                            disabled={opt.disabled}
+                            onClick={opt.action} 
+                            className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${opt.disabled ? 'opacity-30 border-white/5 cursor-not-allowed' : 'bg-white/5 border-white/10 hover:bg-amber-500 hover:text-stone-950 active:scale-95'}`}
+                          >
+                              <div className="flex items-center gap-3">
+                                <span className="text-2xl">{opt.icon}</span>
+                                <span className="font-black uppercase tracking-widest text-sm">{opt.label}</span>
+                              </div>
+                              {opt.subtext && <span className="text-[10px] opacity-60 mt-1">{opt.subtext}</span>}
+                          </button>
+                      ))}
+                  </div>
+                  <button onClick={() => setActiveModal('none')} className="text-white/40 font-black uppercase text-xs hover:text-white transition-colors">{t('back')}</button>
+              </div>
+          </div>
+      )
   };
 
   return (
@@ -903,12 +1025,15 @@ const App: React.FC = () => {
                   />
                 )}
 
+                {activeModal === 'selection' && <SelectionMenuModal />}
+
                 {activeModal === 'inventory' && <Inventory items={gameState.current.inventory} quickSlots={gameState.current.quickSlots} equippedItemId={gameState.current.playerStats.equippedItemId} isNearWorkbench={isNearWorkbench} onAction={handleAction} onClose={() => setActiveModal('none')} onSwitchToCrafting={() => setActiveModal('crafting')} onSwitchToShop={() => { if(isInVillage) setActiveModal('shop'); else showMessage(TRANSLATIONS[gameState.current.settings.language]['need_village']); }} activeTab="inventory" language={gameState.current.settings.language} />}
-                {activeModal === 'crafting' && <Crafting inventory={gameState.current.inventory} playerLevel={gameState.current.playerStats.level} isNearWorkbench={isNearWorkbench} onCraft={craftItem} onClose={() => setActiveModal('none')} onSwitchToInventory={() => setActiveModal('inventory')} onSwitchToShop={() => { if(isInVillage) setActiveModal('shop'); else showMessage(TRANSLATIONS[gameState.current.settings.language]['need_village']); }} activeTab="crafting" language={gameState.current.settings.language} />}
+                {activeModal === 'crafting' && <Crafting inventory={gameState.current.inventory} playerLevel={gameState.current.playerStats.level} workbenchLevel={currentWorkbenchLevel} isNearWorkbench={isNearWorkbench} onCraft={craftItem} onClose={() => setActiveModal('none')} onSwitchToInventory={() => setActiveModal('inventory')} onSwitchToShop={() => { if(isInVillage) setActiveModal('shop'); else showMessage(TRANSLATIONS[gameState.current.settings.language]['need_village']); }} activeTab="crafting" language={gameState.current.settings.language} />}
                 {activeModal === 'shop' && (
                   <Crafting 
                     inventory={gameState.current.inventory} 
                     playerLevel={gameState.current.playerStats.level} 
+                    workbenchLevel={99} // Shops don't restrict by workbench lvl
                     isNearWorkbench={true}
                     onCraft={craftItem} 
                     onClose={() => setActiveModal('none')} 

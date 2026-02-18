@@ -6,6 +6,7 @@ import { RECIPES, TRANSLATIONS } from '../constants';
 interface Props {
   inventory: Item[];
   playerLevel: number;
+  workbenchLevel: number;
   isNearWorkbench: boolean;
   onCraft: (recipeId: string) => void;
   onClose: () => void;
@@ -17,17 +18,21 @@ interface Props {
   shopMode?: boolean;
 }
 
-export const Crafting: React.FC<Props> = ({ inventory, playerLevel, isNearWorkbench, onCraft, onClose, onSwitchToInventory, onSwitchToCrafting, onSwitchToShop, activeTab, language, shopMode = false }) => {
+export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLevel, isNearWorkbench, onCraft, onClose, onSwitchToInventory, onSwitchToCrafting, onSwitchToShop, activeTab, language, shopMode = false }) => {
   const t = (key: string) => TRANSLATIONS[language][key] || key;
   
   const goldCoins = inventory
     .filter(i => i.id === 'gold_coin')
     .reduce((sum, i) => sum + i.quantity, 0);
 
-  const checkIngredients = (recipe: Recipe) => Object.entries(recipe.ingredients).every(([id, qty]) => {
-      const item = inventory.find(i => i.id === id);
-      return item && item.quantity >= (qty as number);
-  });
+  const checkIngredients = (recipe: Recipe) => {
+      const hasIngredients = Object.entries(recipe.ingredients).every(([id, qty]) => {
+          const item = inventory.find(i => i.id === id);
+          return item && item.quantity >= (qty as number);
+      });
+      const hasWorkbenchLevel = recipe.workbenchLevelRequired === undefined || workbenchLevel >= recipe.workbenchLevelRequired;
+      return hasIngredients && hasWorkbenchLevel;
+  };
 
   const tradeRecipes = RECIPES.filter(r => r.category === 'trade');
   const buyRecipes = tradeRecipes.filter(r => r.id.startsWith('buy'));
@@ -36,6 +41,8 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, isNearWorkbe
   const renderRecipeCard = (recipe: Recipe) => {
     const canCraft = checkIngredients(recipe);
     const isSelling = recipe.id.startsWith('sell');
+    const needsWorkbenchUpgrade = recipe.workbenchLevelRequired !== undefined && workbenchLevel < recipe.workbenchLevelRequired;
+
     return (
       <div key={recipe.id} className={`p-4 rounded-2xl border-2 flex flex-col justify-between transition-all ${canCraft ? 'bg-white/10 border-white/20 hover:bg-white/15' : 'bg-black/40 border-white/5 opacity-60'}`}>
         <div className="flex gap-4 mb-3">
@@ -46,6 +53,7 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, isNearWorkbe
           <div className="flex-1 overflow-hidden">
             <h3 className="text-[13px] font-black text-white uppercase truncate tracking-tight">{recipe.name}</h3>
             <p className="text-[11px] text-white/40 leading-tight mt-0.5 line-clamp-1 italic">{recipe.output.description}</p>
+            {needsWorkbenchUpgrade && <p className="text-[9px] text-red-400 font-bold uppercase mt-1">{t('needs_upgrade')} (Lvl {recipe.workbenchLevelRequired})</p>}
           </div>
         </div>
         <div className="bg-black/30 p-2.5 rounded-xl border border-white/5 mb-3 flex flex-wrap gap-x-3 gap-y-1">
@@ -76,7 +84,7 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, isNearWorkbe
             </h2>
             <div className="flex items-center gap-3 mt-1">
               <span className="text-[12px] uppercase font-black tracking-widest text-white/30">
-                {shopMode ? t('trade_with_villagers') : isNearWorkbench ? t('at_workbench') : t('basic_crafting')}
+                {shopMode ? t('trade_with_villagers') : isNearWorkbench ? `${t('at_workbench')} (Lvl ${workbenchLevel})` : t('basic_crafting')}
               </span>
               <div className="h-4 w-px bg-white/10" />
               <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 rounded-full border border-amber-500/20">

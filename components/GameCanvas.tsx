@@ -28,7 +28,7 @@ const ASSETS_SVG: Record<string, string> = {
   hut: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="50" width="60" height="40" fill="#78350f"/><path d="M10 50 L50 10 L90 50 Z" fill="#451a03"/><rect x="45" y="70" width="10" height="20" fill="#312e81"/></svg>`,
   shopkeeper: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="30" r="15" fill="#fef3c7"/><rect x="35" y="45" width="30" height="40" rx="5" fill="#312e81"/><path d="M30 45 L50 10 L70 45" fill="#1e1b4b"/></svg>`,
   villager: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="30" r="15" fill="#fef3c7"/><rect x="35" y="45" width="30" height="40" rx="5" fill="#15803d"/></svg>`,
-  house_village: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="40" width="80" height="50" fill="#a8a29e"/><path d="M0 40 L50 0 L100 40 Z" fill="#7f1d1d"/><rect x="40" y="65" width="20" height="25" fill="#451a03"/></svg>`,
+  house_village: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="40" width="80" height="50" fill="#a8a29e"/><path d="0 40 L50 0 L100 40 Z" fill="#7f1d1d"/><rect x="40" y="65" width="20" height="25" fill="#451a03"/></svg>`,
   loot_bag: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M30 80 Q50 90 70 80 L75 40 Q50 30 25 40 Z" fill="#78350f"/><path d="M30 40 Q50 35 70 40" stroke="#f59e0b" stroke-width="4" fill="none"/></svg>`,
   farm_plot: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="#451a03" rx="10"/><rect x="15" y="15" width="70" height="70" fill="#2d1a12" rx="5"/></svg>`,
   grass_clump: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 90 L30 40 M50 90 L50 30 M50 90 L70 40" stroke="#15803d" stroke-width="6" fill="none" stroke-linecap="round"/></svg>`,
@@ -47,6 +47,18 @@ const getAssetImage = (type: string): HTMLImageElement | null => {
 };
 
 export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntityType }) => {
+  const grassImgRef = useRef<HTMLImageElement | null>(null);
+  const [grassLoaded, setGrassLoaded] = useState(false);
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = 'grass.jpg';
+    img.onload = () => {
+      grassImgRef.current = img;
+      setGrassLoaded(true);
+    };
+  }, []);
+
   const drawPlayer = (ctx: CanvasRenderingContext2D, x: number, y: number, stats: any, scale: number) => {
     const { gender, outfitColor } = stats.character;
     ctx.save();
@@ -146,15 +158,19 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
           const screenX = (x - playerPos.x) * tw;
           const screenY = (y - playerPos.y) * th;
 
-          let color = '#15803d'; 
-          if (tile === 'water') color = '#1d4ed8';
-          else if (tile === 'sand') color = '#f59e0b';
-          else if (tile === 'snow_tile') color = '#f8fafc';
-          else if (tile === 'stone') color = '#44403c';
-          else if (tile === 'road_tile') color = '#574230'; // Brown road color
+          if (tile === 'grass' && grassImgRef.current && grassLoaded) {
+            ctx.drawImage(grassImgRef.current, screenX, screenY, tw + 1, th + 1);
+          } else {
+            let color = '#15803d'; 
+            if (tile === 'water') color = '#1d4ed8';
+            else if (tile === 'sand') color = '#f59e0b';
+            else if (tile === 'snow_tile') color = '#f8fafc';
+            else if (tile === 'stone') color = '#44403c';
+            else if (tile === 'road_tile') color = '#574230';
 
-          ctx.fillStyle = color;
-          ctx.fillRect(screenX, screenY, tw + 1, th + 1);
+            ctx.fillStyle = color;
+            ctx.fillRect(screenX, screenY, tw + 1, th + 1);
+          }
         }
       }
 
@@ -255,7 +271,7 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
 
     render();
     return () => cancelAnimationFrame(animFrame);
-  }, [gameState, canvasRef]);
+  }, [gameState, canvasRef, grassLoaded]);
 
   useEffect(() => {
     const handleResize = () => {
