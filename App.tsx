@@ -321,25 +321,28 @@ const App: React.FC = () => {
         damage = GATHER_BASE_DAMAGE;
         if (preferredTools.includes(equippedTool?.id || '')) damage *= GATHER_TOOL_BOOST;
     }
+    
+    // REDUCE HEALTH
     targetEntity.health -= damage;
     SoundManager.playGather(targetEntity.type, playerStats.equippedItemId);
     
     const gatherInfo = GATHER_ITEM_QUANTITY[targetEntity.type as keyof typeof GATHER_ITEM_QUANTITY];
+    
+    // AWARD LOOT (Fixed: now awards loot regardless of current health check so killing blow gives loot)
     if (gatherInfo) {
       spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo.particle as Particle['type'], 3, targetEntity.type.includes('tree') ? '#a16207' : '#fbbf24', 0.6);
       addFloatingText(targetEntity.x, targetEntity.y, `+${gatherInfo.quantity} ${t(gatherInfo.item)}`, '#fbbf24');
-    }
-    
-    if (targetEntity.health > 0 && gatherInfo) {
-        const itemToAdd = { ...ITEMS[gatherInfo.item], quantity: gatherInfo.quantity };
-        const existingItem = inventory.find(i => i.id === itemToAdd.id && i.stackable && (i.quantity < (i.maxStack || 99)));
-        if (existingItem) existingItem.quantity += itemToAdd.quantity;
-        else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push(itemToAdd);
-        else showMessage(t('inv_full'));
+      
+      const itemToAdd = { ...ITEMS[gatherInfo.item], quantity: gatherInfo.quantity };
+      const existingItem = inventory.find(i => i.id === itemToAdd.id && i.stackable && (i.quantity < (i.maxStack || 99)));
+      if (existingItem) existingItem.quantity += itemToAdd.quantity;
+      else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push(itemToAdd);
+      else showMessage(t('inv_full'));
     }
     
     playerStats.xp += GATHER_XP_PER_HIT; checkLevelUp(playerStats);
     
+    // TOOL DURABILITY
     if (equippedTool && equippedTool.durability !== undefined) {
       equippedTool.durability = Math.max(0, equippedTool.durability - 10);
       if (equippedTool.durability <= 0) { 
@@ -360,7 +363,6 @@ const App: React.FC = () => {
           playerStats.equippedItemId = nextTool.id;
           SoundManager.playUI('equip');
         } else {
-          // Try to find any tool of the same general type (axe, pickaxe)
           const fallbackTool = inventory.find(i => i.type === brokenToolType && i.durability && i.durability > 0);
           if (fallbackTool) {
             playerStats.equippedItemId = fallbackTool.id;
@@ -370,6 +372,7 @@ const App: React.FC = () => {
       }
     }
     
+    // ENTITY DEATH
     if (targetEntity.health <= 0) {
       engine.entities.splice(entityIndex, 1);
       spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo?.particle as Particle['type'] || 'dust', 10, '#a16207', 1.0);
