@@ -266,17 +266,17 @@ const App: React.FC = () => {
           spawnParticles(entity.x, entity.y, 'spark', 12, '#fbbf24', 1.5);
           showMessage(t('upgraded'));
           
-          // REFRESH SELECTION MODAL TO REFLECT NEW LEVEL
-          setActiveModal('none');
-          setTimeout(() => {
-              handleInteract(entityId);
-          }, 50);
+          // Re-trigger interaction to refresh modal
+          if (activeModal === 'selection') {
+              setActiveModal('none');
+              setTimeout(() => handleInteract(entityId), 50);
+          }
           
           setUiState(prev => prev + 1);
       } else {
           showMessage(t('inv_full'));
       }
-  }, []);
+  }, [activeModal]);
 
   const handleAction = useCallback((action: 'use' | 'reorder' | 'equip' | 'assign_quickslot' | 'place' | 'repair' | 'repair_all' | 'fire', data: any) => {
     const engine = gameState.current;
@@ -1007,7 +1007,7 @@ const App: React.FC = () => {
     if (recipe) {
         const engine = gameState.current;
         const needsWorkbench = recipe.workbenchLevelRequired !== undefined;
-        const hasWorkbenchLevel = !needsWorkbench || (isNearWorkbench && currentWorkbenchLevel >= recipe.workbenchLevelRequired);
+        const hasWorkbenchLevel = !needsWorkbench || (isNearWorkbench && currentWorkbenchLevel >= (recipe.workbenchLevelRequired || 0));
 
         const canCraftMultiple = Object.entries(recipe.ingredients).every(([id, qty]) => {
             const item = engine.inventory.find(i => i.id === id);
