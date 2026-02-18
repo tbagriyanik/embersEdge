@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GameState, PlayerStats, Entity, Particle, Projectile, FloatingText, WeatherState, Item, TileType, GameSettings, WeatherType, EntityType } from './types';
+import { GameState, PlayerStats, Entity, Particle, Projectile, FloatingText, WeatherState, Item, TileType, GameSettings, WeatherType, EntityType, Recipe } from './types';
 import { INITIAL_STATS, TILE_WIDTH, TILE_HEIGHT, ITEMS, RECIPES, CHUNK_SIZE, SAVE_KEY, SETTINGS_SAVE_KEY, TRANSLATIONS, GATHER_BASE_DAMAGE, GATHER_XP_PER_HIT, GATHER_ITEM_QUANTITY, GATHER_TOOL_REQUIREMENTS, MAX_INVENTORY_SLOTS, GATHER_HAND_DAMAGE, GATHER_TOOL_BOOST, VILLAGER_DIALOGUE, VILLAGE_NAMES, STRUCTURE_UPGRADES } from './constants';
-import { HUD } from './components/HUD';
+import { HUD, formatAbbreviatedNumber } from './components/HUD';
 import { GameCanvas } from './components/GameCanvas';
 import { MobileControls } from './components/MobileControls';
 import { Inventory } from './components/Inventory';
@@ -24,11 +24,20 @@ export const calculateTileType = (x: number, y: number): TileType => {
   return 'grass';
 };
 
+interface MenuOption {
+  label: string;
+  action: () => void;
+  icon: string;
+  disabled?: boolean;
+  subtext?: string;
+  costs?: { id: string, amount: number }[];
+}
+
 const App: React.FC = () => {
   const [gameStarted, setGameStarted] = useState(false);
   const [activeModal, setActiveModal] = useState<'none' | 'inventory' | 'crafting' | 'shop' | 'settings' | 'dialogue' | 'selection'>('none');
   const [activeDialogueId, setActiveDialogueId] = useState<string | null>(null);
-  const [selectionMenu, setSelectionMenu] = useState<{ title: string, options: { label: string, action: () => void, icon: string, disabled?: boolean, subtext?: string }[] } | null>(null);
+  const [selectionMenu, setSelectionMenu] = useState<{ title: string, subtitle?: string, options: MenuOption[] } | null>(null);
   const [isDead, setIsDead] = useState(false);
   const [isNearWorkbench, setIsNearWorkbench] = useState(false);
   const [isResting, setIsResting] = useState(false);
@@ -266,11 +275,15 @@ const App: React.FC = () => {
           spawnParticles(entity.x, entity.y, 'spark', 12, '#fbbf24', 1.5);
           showMessage(t('upgraded'));
           
-          setActiveModal('none');
-          setTimeout(() => handleInteract(entityId), 50);
+          if (activeModal === 'selection') {
+              setActiveModal('none');
+              setSelectionMenu(null);
+              setTimeout(() => handleInteract(entityId), 50);
+          }
+          
           setUiState(prev => prev + 1);
       } else {
-          showMessage(t('inv_full'));
+          showMessage(t('needs_upgrade'));
       }
   }, [activeModal]);
 
@@ -430,7 +443,8 @@ const App: React.FC = () => {
             seeds.quantity--;
             if (seeds.quantity <= 0) {
               engine.quickSlots = engine.quickSlots.map(uid => uid === seeds.uniqueId ? null : uid);
-              engine.inventory.splice(engine.inventory.indexOf(seeds), 1);
+              const seedIdx = engine.inventory.indexOf(seeds);
+              if (seedIdx > -1) engine.inventory.splice(seedIdx, 1);
             }
             entity.growthStage = 1;
             entity.growthTimer = 10000;
@@ -456,15 +470,25 @@ const App: React.FC = () => {
 
       if (entity.type === 'workbench') {
           const lvl = entity.level || 1;
-          const upgradeAvailable = STRUCTURE_UPGRADES.workbench[lvl + 1];
-          const upgradeText = upgradeAvailable ? `${t('upgrade')} (Lvl ${lvl + 1})` : "Max Level";
+          const nextLvl = lvl + 1;
+          const upgradeCost = STRUCTURE_UPGRADES.workbench[nextLvl];
           
+          const costs = upgradeCost ? Object.entries(upgradeCost).map(([id, amount]) => ({ id, amount: amount as number })) : undefined;
+          const canAffordCost = costs ? costs.every(c => (engine.inventory.find(i => i.id === c.id)?.quantity || 0) >= c.amount) : true;
+
           setCurrentWorkbenchLevel(lvl);
           setSelectionMenu({
-              title: "Workbench (Lvl " + lvl + ")",
+              title: "Workbench",
+              subtitle: `Level ${lvl} Infrastructure`,
               options: [
                   { label: t('crafting'), icon: '⚒️', action: () => { setActiveModal('crafting'); } },
-                  { label: upgradeText, icon: '⬆️', disabled: !upgradeAvailable, subtext: upgradeAvailable ? Object.entries(upgradeAvailable).map(([k, v]) => `${v} ${t(k)}`).join(', ') : '', action: () => handleUpgrade(entity.id) }
+                  { 
+                    label: upgradeCost ? `${t('upgrade')} (LV ${nextLvl})` : "MAX LEVEL", 
+                    icon: '⬆️', 
+                    disabled: !upgradeCost || !canAffordCost, 
+                    costs: costs,
+                    action: () => handleUpgrade(entity.id) 
+                  }
               ]
           });
           setActiveModal('selection');
@@ -482,11 +506,15 @@ const App: React.FC = () => {
         setUiState(prev => prev + 1);
       } else if (entity.type === 'tent' || entity.type === 'hut') {
         const lvl = entity.level || 1;
-        const upgradeAvailable = STRUCTURE_UPGRADES.hut[lvl + 1];
-        const upgradeText = upgradeAvailable ? `${t('upgrade')} (Lvl ${lvl + 1})` : "Max Level";
+        const nextLvl = lvl + 1;
+        const upgradeCost = STRUCTURE_UPGRADES[entity.type === 'hut' ? 'hut' : 'tent']?.[nextLvl] || STRUCTURE_UPGRADES.hut[nextLvl];
+        
+        const costs = upgradeCost ? Object.entries(upgradeCost).map(([id, amount]) => ({ id, amount: amount as number })) : undefined;
+        const canAffordCost = costs ? costs.every(c => (engine.inventory.find(i => i.id === c.id)?.quantity || 0) >= c.amount) : true;
 
         setSelectionMenu({
-            title: t(entity.type) + " (Lvl " + lvl + ")",
+            title: t(entity.type),
+            subtitle: `Level ${lvl} Shelter`,
             options: [
                 { label: t('rest_tent'), icon: '💤', action: () => {
                     setIsResting(true);
@@ -506,10 +534,17 @@ const App: React.FC = () => {
                         setIsResting(false);
                         engine.isResting = false;
                         setActiveModal('none');
+                        setSelectionMenu(null);
                         setUiState(prev => prev + 1);
                     }, 2000);
                 } },
-                { label: upgradeText, icon: '⬆️', disabled: !upgradeAvailable, subtext: upgradeAvailable ? Object.entries(upgradeAvailable).map(([k, v]) => `${v} ${t(k)}`).join(', ') : '', action: () => handleUpgrade(entity.id) }
+                { 
+                  label: upgradeCost ? `${t('upgrade')} (LV ${nextLvl})` : "MAX LEVEL", 
+                  icon: '⬆️', 
+                  disabled: !upgradeCost || !canAffordCost,
+                  costs: costs,
+                  action: () => handleUpgrade(entity.id) 
+                }
             ]
         });
         setActiveModal('selection');
@@ -525,7 +560,8 @@ const App: React.FC = () => {
           consumedItem.quantity--;
           if (consumedItem.quantity <= 0) {
             engine.quickSlots = engine.quickSlots.map(uid => uid === consumedItem!.uniqueId ? null : uid);
-            inventory.splice(inventory.indexOf(consumedItem), 1);
+            const idx = inventory.indexOf(consumedItem);
+            if (idx > -1) inventory.splice(idx, 1);
           }
           
           addItemToInventory(cookedItemProto, 1);
@@ -1008,7 +1044,8 @@ const App: React.FC = () => {
               item.quantity -= (qty as number) * multiple;
               if (item.quantity <= 0) {
                 engine.quickSlots = engine.quickSlots.map(uid => uid === item.uniqueId ? null : uid);
-                engine.inventory = engine.inventory.filter(i => i.uniqueId !== item.uniqueId);
+                const invIdx = engine.inventory.indexOf(item);
+                if (invIdx > -1) engine.inventory.splice(invIdx, 1);
               }
             }
         });
@@ -1033,27 +1070,57 @@ const App: React.FC = () => {
   const SelectionMenuModal = () => {
       if (!selectionMenu) return null;
       const t = (key: string) => TRANSLATIONS[gameState.current.settings.language][key] || key;
+      
       return (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm pointer-events-auto" onClick={() => setActiveModal('none')}>
-              <div className="bg-stone-900 border border-white/20 p-8 rounded-[2rem] w-full max-w-sm flex flex-col gap-6 animate-in zoom-in-95 duration-200 shadow-2xl" onClick={e => e.stopPropagation()}>
-                  <h3 className="text-2xl font-black text-amber-500 uppercase tracking-tighter text-center">{selectionMenu.title}</h3>
-                  <div className="flex flex-col gap-3">
-                      {selectionMenu.options.map((opt, i) => (
-                          <button 
-                            key={i} 
-                            disabled={opt.disabled}
-                            onClick={opt.action} 
-                            className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${opt.disabled ? 'opacity-30 border-white/5 cursor-not-allowed' : 'bg-white/5 border-white/10 hover:bg-amber-500 hover:text-stone-950 active:scale-95'}`}
-                          >
-                              <div className="flex items-center gap-3">
-                                <span className="text-2xl">{opt.icon}</span>
-                                <span className="font-black uppercase tracking-widest text-sm">{opt.label}</span>
-                              </div>
-                              {opt.subtext && <span className="text-[10px] opacity-60 mt-1">{opt.subtext}</span>}
-                          </button>
-                      ))}
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-auto" onClick={() => { setActiveModal('none'); setSelectionMenu(null); }}>
+              <div className="bg-stone-900 border-2 border-white/10 p-8 rounded-[3rem] w-full max-w-md flex flex-col gap-8 animate-in zoom-in-95 duration-200 shadow-[0_30px_90px_rgba(0,0,0,0.8)]" onClick={e => e.stopPropagation()}>
+                  <div className="flex flex-col items-center gap-1">
+                      <h3 className="text-3xl font-black text-amber-500 uppercase tracking-tighter text-center">{selectionMenu.title}</h3>
+                      {selectionMenu.subtitle && <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/30">{selectionMenu.subtitle}</span>}
                   </div>
-                  <button onClick={() => setActiveModal('none')} className="text-white/40 font-black uppercase text-xs hover:text-white transition-colors">{t('back')}</button>
+
+                  <div className="flex flex-col gap-4">
+                      {selectionMenu.options.map((opt, i) => {
+                          const isUpgrade = opt.label.includes(t('upgrade'));
+                          
+                          return (
+                              <button 
+                                key={i} 
+                                disabled={opt.disabled}
+                                onClick={() => { SoundManager.playUI('click'); opt.action(); }} 
+                                className={`group flex flex-col items-stretch p-6 rounded-[2rem] border-2 transition-all relative overflow-hidden ${opt.disabled ? 'opacity-30 border-white/5 cursor-not-allowed grayscale' : 'bg-white/5 border-white/10 hover:bg-amber-500 hover:border-amber-400 hover:text-stone-950 active:scale-95'}`}
+                              >
+                                  <div className="flex items-center justify-between z-10">
+                                      <div className="flex items-center gap-4">
+                                          <span className="text-3xl drop-shadow-md group-hover:scale-110 transition-transform">{opt.icon}</span>
+                                          <span className="font-black uppercase tracking-widest text-lg">{opt.label}</span>
+                                      </div>
+                                  </div>
+
+                                  {opt.costs && opt.costs.length > 0 && (
+                                      <div className="flex flex-wrap gap-2 mt-4 z-10">
+                                          {opt.costs.map(cost => {
+                                              const invItem = gameState.current.inventory.find(inv => inv.id === cost.id);
+                                              const hasEnough = (invItem?.quantity || 0) >= cost.amount;
+                                              const itemIcon = ITEMS[cost.id]?.icon || '📦';
+                                              
+                                              return (
+                                                  <div key={cost.id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase border transition-colors ${hasEnough ? 'bg-black/20 border-white/10 group-hover:bg-black/40 group-hover:border-black/20' : 'bg-red-500/20 border-red-500/40 text-red-500'}`}>
+                                                      <span>{itemIcon}</span>
+                                                      <span>{invItem?.quantity || 0}/{cost.amount}</span>
+                                                  </div>
+                                              );
+                                          })}
+                                      </div>
+                                  )}
+                                  
+                                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                          );
+                      })}
+                  </div>
+                  
+                  <button onClick={() => { SoundManager.playUI('click'); setActiveModal('none'); setSelectionMenu(null); }} className="text-white/20 font-black uppercase text-[10px] tracking-[0.3em] hover:text-white transition-colors self-center px-8 py-2">{t('back')}</button>
               </div>
           </div>
       )
@@ -1067,12 +1134,13 @@ const App: React.FC = () => {
                 <HUD stats={gameState.current.playerStats} time={gameState.current.time} message={message} gameState={gameState.current} onAction={handleAction} onZoom={(d) => inputManagerRef.current?.handleWheel({ deltaY: d } as WheelEvent)} onRotate={() => {}} onOpenSettings={() => setActiveModal('settings')} />
                 
                 <div className="absolute top-4 right-4 z-50 flex gap-4">
-                    <button onClick={() => setActiveModal(prev => prev === 'inventory' ? 'none' : 'inventory')} className={`w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto ${activeModal === 'inventory' ? 'bg-amber-500/80' : ''}`}>🎒</button>
-                    <button onClick={() => setActiveModal(prev => prev === 'crafting' ? 'none' : 'crafting')} className={`w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto ${activeModal === 'crafting' ? 'bg-amber-500/80' : ''}`}>⚒️</button>
-                    <button onClick={() => {
-                        if (isInVillage) setActiveModal(prev => prev === 'shop' ? 'none' : 'shop');
-                        else showMessage(TRANSLATIONS[gameState.current.settings.language]['need_village']);
-                    }} className={`w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto ${activeModal === 'shop' ? 'bg-amber-500/80' : ''}`}>🪙</button>
+                    <button onClick={() => setActiveModal(prev => prev === 'inventory' ? 'none' : 'inventory')} className={`w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto ${activeModal === 'inventory' ? 'bg-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.4)]' : ''}`}>🎒</button>
+                    <button onClick={() => setActiveModal(prev => prev === 'crafting' ? 'none' : 'crafting')} className={`w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto ${activeModal === 'crafting' ? 'bg-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.4)]' : ''}`}>⚒️</button>
+                    {isInVillage && (
+                      <button onClick={() => {
+                          setActiveModal(prev => prev === 'shop' ? 'none' : 'shop');
+                      }} className={`w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto ${activeModal === 'shop' ? 'bg-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.4)]' : ''}`}>🪙</button>
+                    )}
                 </div>
 
                 <div className="absolute bottom-4 right-4 z-50 pointer-events-auto">
