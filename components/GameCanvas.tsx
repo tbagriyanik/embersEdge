@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { GameState, TileType, Entity, EntityType, FloatingText, Particle } from '../types';
 import { TILE_WIDTH, TILE_HEIGHT, CHUNK_SIZE } from '../constants';
 import { calculateTileType } from '../App';
@@ -28,8 +28,6 @@ const ASSETS_SVG: Record<string, string> = {
   loot_bag: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M30 80 Q50 90 70 80 L75 40 Q50 30 25 40 Z" fill="#78350f"/><path d="M30 40 Q50 35 70 40" stroke="#f59e0b" stroke-width="4" fill="none"/></svg>`,
   farm_plot: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="#451a03" rx="10"/><rect x="15" y="15" width="70" height="70" fill="#2d1a12" rx="5"/><path d="M20 25 L80 25 M20 40 L80 40 M20 55 L80 55 M20 70 L80 70" stroke="rgba(255,255,255,0.05)" stroke-width="2"/></svg>`,
   grass_clump: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 90 L30 40 M50 90 L50 30 M50 90 L70 40" stroke="#15803d" stroke-width="6" fill="none" stroke-linecap="round"/></svg>`,
-  
-  // Enhanced Crop Growth Stages
   berry_stage_1: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q48 75 50 70 Q52 75 50 85" fill="#166534"/><path d="M50 72 L45 68" stroke="#166534" stroke-width="2"/></svg>`,
   berry_stage_2: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q40 65 50 50 Q60 65 50 85" fill="#15803d"/><path d="M50 80 L65 70 M50 75 L35 68" stroke="#15803d" stroke-width="3"/></svg>`,
   berry_stage_3: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q30 60 50 40 Q70 60 50 85" fill="#15803d"/><circle cx="40" cy="65" r="4" fill="#a855f7" opacity="0.6"/><circle cx="60" cy="55" r="4" fill="#a855f7" opacity="0.6"/><circle cx="50" cy="45" r="4" fill="#a855f7" opacity="0.6"/></svg>`,
@@ -50,31 +48,31 @@ const getAssetImage = (type: string): HTMLImageElement | null => {
 };
 
 export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntityType }) => {
-  const grassImgRef = useRef<HTMLImageElement | null>(null);
-  const artGrassImgRef = useRef<HTMLImageElement | null>(null);
-  const [grassLoaded, setGrassLoaded] = useState(false);
-  const [artGrassLoaded, setArtGrassLoaded] = useState(false);
+  
+  const drawProceduralGrass = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, isArtificial: boolean) => {
+    ctx.save();
+    // Base color
+    ctx.fillStyle = isArtificial ? '#14532d' : '#064e3b';
+    ctx.fillRect(x, y, w + 1, h + 1);
 
-  useEffect(() => {
-    const img = new Image();
-    img.src = 'grass.jpg';
-    img.onload = () => {
-      grassImgRef.current = img;
-      setGrassLoaded(true);
-    };
+    // Seed-based randomization for consistent tile look
+    const tileSeed = (Math.abs(x * 12345) ^ Math.abs(y * 6789)) % 1000;
+    
+    // Tiny grass blades
+    ctx.strokeStyle = isArtificial ? '#166534' : 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    
+    for (let i = 0; i < (isArtificial ? 4 : 3); i++) {
+        const ox = ((tileSeed + i * 23) % 100) / 100 * w;
+        const oy = ((tileSeed + i * 47) % 100) / 100 * h;
+        ctx.beginPath();
+        ctx.moveTo(x + ox, y + oy);
+        ctx.lineTo(x + ox + 2, y + oy - 4);
+        ctx.stroke();
+    }
+    ctx.restore();
+  };
 
-    const artImg = new Image();
-    artImg.src = 'artificial_grass.jpg';
-    artImg.onload = () => {
-      artGrassImgRef.current = artImg;
-      setArtGrassLoaded(true);
-    };
-  }, []);
-
-  /**
-   * Procedurally draws a humanoid character (Player or NPC)
-   * with a more realistic structure, shading, and limb movement.
-   */
   const drawHumanoid = (
     ctx: CanvasRenderingContext2D, 
     x: number, 
@@ -98,34 +96,27 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
     ctx.save();
     ctx.translate(x, y);
 
-    // 1. Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath(); 
     ctx.ellipse(0, 0, 18 * scale, 10 * scale, 0, 0, Math.PI * 2); 
     ctx.fill();
 
-    // Walking / Idle Bobbing
     const bob = isWalking ? Math.sin(time * 2) * 2 : Math.sin(time) * 0.5;
     ctx.translate(0, bob);
 
-    // Facing calculation (left/right)
     const isFacingEast = facing.includes('e') || facing === 'right';
     const sideMult = isFacingEast ? 1 : -1;
-
-    // Animation states
     const legSwing = isWalking ? Math.sin(time * 1.5) * 15 : 0;
     const armSwing = isWalking ? Math.cos(time * 1.5) * 20 : Math.sin(time * 0.5) * 5;
 
-    // 2. Legs
     const drawLeg = (offsetX: number, angle: number) => {
         ctx.save();
         ctx.translate(offsetX * scale, -10 * scale);
         ctx.rotate((angle * Math.PI) / 180);
-        ctx.fillStyle = '#1c1917'; // Pant color
+        ctx.fillStyle = '#1c1917';
         ctx.beginPath();
         ctx.roundRect(-4 * scale, 0, 8 * scale, 14 * scale, 3 * scale);
         ctx.fill();
-        // Boot
         ctx.fillStyle = '#0c0a09';
         ctx.fillRect(-5 * scale, 10 * scale, 10 * scale, 5 * scale);
         ctx.restore();
@@ -134,16 +125,14 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
     drawLeg(-5, legSwing);
     drawLeg(5, -legSwing);
 
-    // 3. Torso
     ctx.save();
     ctx.translate(0, -32 * scale);
     const bodyGrad = ctx.createLinearGradient(-12 * scale, 0, 12 * scale, 0);
     bodyGrad.addColorStop(0, outfitColor);
-    bodyGrad.addColorStop(1, '#00000044'); // Subtle shadow on one side
+    bodyGrad.addColorStop(1, '#00000044');
     ctx.fillStyle = bodyGrad;
     
     if (gender === 'female') {
-        // More curved torso for female
         ctx.beginPath();
         ctx.moveTo(-10 * scale, 0);
         ctx.bezierCurveTo(-14 * scale, 10 * scale, -14 * scale, 25 * scale, -10 * scale, 32 * scale);
@@ -157,7 +146,6 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
         ctx.fill();
     }
     
-    // Clothing Detail (Buttons/Seams)
     ctx.strokeStyle = 'rgba(255,255,255,0.1)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -165,34 +153,25 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
     ctx.lineTo(0, 30 * scale);
     ctx.stroke();
 
-    // 4. Arms
     const drawArm = (isFront: boolean) => {
         const armSide = isFront ? 1 : -1;
         ctx.save();
         const baseAngle = isFront ? armSwing : -armSwing;
         const interactionOffset = isFront && interactionAnim > 0 ? -60 : 0;
-        
         ctx.translate(13 * armSide * scale, 5 * scale);
         ctx.rotate(((baseAngle + interactionOffset) * Math.PI) / 180);
-        
-        // Sleeve
         ctx.fillStyle = outfitColor;
         ctx.beginPath();
         ctx.roundRect(-4 * scale, 0, 8 * scale, 16 * scale, 4 * scale);
         ctx.fill();
-        
-        // Hand
-        ctx.fillStyle = '#fef3c7'; // Skin tone
+        ctx.fillStyle = '#fef3c7';
         ctx.beginPath();
         ctx.arc(0, 18 * scale, 4 * scale, 0, Math.PI * 2);
         ctx.fill();
-
-        // 5. Tool / Weapon (Front arm only)
         if (isFront && equippedItemId) {
             let toolKey = 'axe_tool';
             if (equippedItemId.includes('pick')) toolKey = 'pickaxe_tool';
             else if (equippedItemId.includes('hoe')) toolKey = 'hoe_tool';
-            
             const toolImg = getAssetImage(toolKey);
             if (toolImg) {
                 ctx.save();
@@ -205,24 +184,18 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
         ctx.restore();
     };
 
-    // Sort arms by depth
     if (isFacingEast) {
-        drawArm(false); // Back arm
-        drawArm(true);  // Front arm
+        drawArm(false);
+        drawArm(true);
     } else {
-        drawArm(true);  // Back arm
-        drawArm(false); // Front arm
+        drawArm(true);
+        drawArm(false);
     }
 
-    // 6. Head
     ctx.save();
-    ctx.translate(0, -10 * scale); // Position head relative to body
-    
-    // Neck
+    ctx.translate(0, -10 * scale);
     ctx.fillStyle = '#f3e8c0';
     ctx.fillRect(-4 * scale, -2 * scale, 8 * scale, 4 * scale);
-
-    // Face
     const skinGrad = ctx.createRadialGradient(0, -8 * scale, 0, 0, -8 * scale, 12 * scale);
     skinGrad.addColorStop(0, '#fef3c7');
     skinGrad.addColorStop(1, '#f3e8c0');
@@ -230,16 +203,12 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
     ctx.beginPath();
     ctx.arc(0, -12 * scale, 11 * scale, 0, Math.PI * 2);
     ctx.fill();
-
-    // Eyes
     ctx.fillStyle = '#000';
     const eyeX = (isFacingEast ? 4 : -4) * scale;
     ctx.beginPath(); ctx.arc(eyeX - (1*sideMult), -14 * scale, 1.5 * scale, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(eyeX + (4*sideMult), -14 * scale, 1.5 * scale, 0, Math.PI * 2); ctx.fill();
 
-    // Hair / Hat
     if (isShopkeeper) {
-        // Wizard-like hat
         ctx.fillStyle = '#1e1b4b';
         ctx.beginPath();
         ctx.moveTo(-15 * scale, -18 * scale);
@@ -248,26 +217,22 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
         ctx.closePath();
         ctx.fill();
     } else {
-        // Hair
         ctx.fillStyle = gender === 'female' ? '#451a03' : '#1c1917';
         if (gender === 'female') {
-            // Long hair
             ctx.beginPath();
             ctx.ellipse(0, -16 * scale, 13 * scale, 10 * scale, 0, Math.PI, Math.PI * 2);
             ctx.fill();
             ctx.fillRect(-13 * scale, -16 * scale, 5 * scale, 25 * scale);
             ctx.fillRect(8 * scale, -16 * scale, 5 * scale, 25 * scale);
         } else {
-            // Short hair
             ctx.beginPath();
             ctx.ellipse(0, -18 * scale, 12 * scale, 8 * scale, 0, Math.PI, Math.PI * 2);
             ctx.fill();
         }
     }
-    
-    ctx.restore(); // Head
-    ctx.restore(); // Torso
-    ctx.restore(); // Main translate
+    ctx.restore();
+    ctx.restore();
+    ctx.restore();
   };
 
   useEffect(() => {
@@ -288,7 +253,6 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
       const th = TILE_HEIGHT * zoom;
 
       ctx.clearRect(0, 0, width, height);
-
       ctx.save();
       ctx.translate(width / 2 + cameraOffsetX, height / 2 + cameraOffsetY);
 
@@ -316,12 +280,10 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
           const screenX = (x - playerPos.x) * tw;
           const screenY = (y - playerPos.y) * th;
 
-          if (tile === 'grass' && grassImgRef.current && grassLoaded) {
-            ctx.drawImage(grassImgRef.current, screenX, screenY, tw + 1, th + 1);
-            ctx.fillStyle = 'rgba(0, 50, 0, 0.15)';
-            ctx.fillRect(screenX, screenY, tw + 1, th + 1);
-          } else if (tile === 'artificial_grass' && artGrassImgRef.current && artGrassLoaded) {
-            ctx.drawImage(artGrassImgRef.current, screenX, screenY, tw + 1, th + 1);
+          if (tile === 'grass') {
+            drawProceduralGrass(ctx, screenX, screenY, tw, th, false);
+          } else if (tile === 'artificial_grass') {
+            drawProceduralGrass(ctx, screenX, screenY, tw, th, true);
           } else {
             let color = '#064e3b';
             if (tile === 'water') color = '#1d4ed8';
@@ -329,7 +291,6 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
             else if (tile === 'snow_tile') color = '#f8fafc';
             else if (tile === 'stone') color = '#44403c';
             else if (tile === 'road_tile') color = '#574230';
-
             ctx.fillStyle = color;
             ctx.fillRect(screenX, screenY, tw + 1, th + 1);
           }
@@ -358,7 +319,6 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
           });
         } else {
           const ent = r.data as Entity;
-          
           if (ent.type === 'villager' || ent.type === 'shopkeeper') {
              drawHumanoid(ctx, screenX, screenY, {
                 gender: (parseInt(ent.id.slice(-1)) || 0) % 2 === 0 ? 'male' : 'female',
@@ -381,14 +341,12 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
                     ctx.scale(-1, 1);
                     ctx.translate(-screenX, -screenY);
                 }
-
                 if (ent.health < ent.maxHealth) {
                     ctx.fillStyle = 'rgba(0,0,0,0.5)';
                     ctx.fillRect(screenX - 20 * zoom, screenY - 50 * zoom, 40 * zoom, 4 * zoom);
                     ctx.fillStyle = '#ef4444';
                     ctx.fillRect(screenX - 20 * zoom, screenY - 50 * zoom, (ent.health / ent.maxHealth) * 40 * zoom, 4 * zoom);
                 }
-
                 if (ent.level && ent.level > 1 && (ent.type === 'workbench' || ent.type === 'hut')) {
                     ctx.fillStyle = 'white';
                     ctx.strokeStyle = 'black';
@@ -398,7 +356,6 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
                     ctx.strokeText(`LVL ${ent.level}`, screenX, screenY - 65 * zoom);
                     ctx.fillText(`LVL ${ent.level}`, screenX, screenY - 65 * zoom);
                 }
-
                 if (ent.type === 'farm_plot' && ent.growthStage) {
                     if (ent.growthStage === 5) {
                         const glowPulse = (Math.sin(nowTs / 300) + 1) / 2;
@@ -412,13 +369,11 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
                         ctx.arc(screenX, screenY - 30 * zoom, 40 * zoom, 0, Math.PI * 2);
                         ctx.fill();
                         ctx.restore();
-
                         const hoverBob = Math.sin(nowTs / 400) * 8 * zoom;
                         ctx.font = `bold ${16 * zoom}px serif`;
                         ctx.textAlign = 'center';
                         ctx.fillText('🍇', screenX, screenY - 70 * zoom + hoverBob);
                     }
-
                     ctx.save();
                     ctx.translate(screenX, screenY);
                     const stageImg = getAssetImage(`berry_stage_${ent.growthStage}`);
@@ -428,7 +383,6 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
                     }
                     ctx.restore();
                 }
-
                 ctx.drawImage(img, screenX - size/2, screenY - size * 0.8, size, size);
                 ctx.restore();
             }
@@ -436,7 +390,6 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
         }
       });
 
-      // Particles, projectils, texts...
       particles.forEach(p => {
         const screenX = (p.x - playerPos.x) * tw + tw/2;
         const screenY = (p.y - playerPos.y) * th + th/2;
@@ -496,7 +449,7 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
 
     render();
     return () => cancelAnimationFrame(animFrame);
-  }, [gameState, canvasRef, grassLoaded, artGrassLoaded]);
+  }, [gameState, canvasRef]);
 
   useEffect(() => {
     const handleResize = () => {

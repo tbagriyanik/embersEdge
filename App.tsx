@@ -266,12 +266,8 @@ const App: React.FC = () => {
           spawnParticles(entity.x, entity.y, 'spark', 12, '#fbbf24', 1.5);
           showMessage(t('upgraded'));
           
-          // Re-trigger interaction to refresh modal
-          if (activeModal === 'selection') {
-              setActiveModal('none');
-              setTimeout(() => handleInteract(entityId), 50);
-          }
-          
+          setActiveModal('none');
+          setTimeout(() => handleInteract(entityId), 50);
           setUiState(prev => prev + 1);
       } else {
           showMessage(t('inv_full'));
@@ -596,11 +592,9 @@ const App: React.FC = () => {
     SoundManager.playGather(targetEntity.type, playerStats.equippedItemId);
     
     const gatherInfo = GATHER_ITEM_QUANTITY[targetEntity.type as keyof typeof GATHER_ITEM_QUANTITY];
-    
     if (gatherInfo) {
       spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo.particle as Particle['type'], 3, targetEntity.type.includes('tree') ? '#a16207' : '#fbbf24', 0.6);
       addFloatingText(targetEntity.x, targetEntity.y, `+${gatherInfo.quantity} ${t(gatherInfo.item)}`, '#fbbf24');
-      
       const proto = ITEMS[gatherInfo.item];
       addItemToInventory(proto, gatherInfo.quantity);
     }
@@ -700,7 +694,6 @@ const App: React.FC = () => {
     engine.time += dt * 5; if (engine.time >= 2400) engine.time = 0;
     engine.isDay = engine.time > 600 && engine.time < 1800;
     
-    // Workbench Proximity Detection
     let foundWorkbench = false;
     let wbLvl = 1;
     for (const ent of engine.entities) {
@@ -751,7 +744,6 @@ const App: React.FC = () => {
 
     for (let i = engine.entities.length - 1; i >= 0; i--) {
       const ent = engine.entities[i];
-      
       if (ent.type === 'farm_plot' && ent.growthStage && ent.growthStage < 5) {
         if (!ent.growthTimer) ent.growthTimer = 10000;
         ent.growthTimer -= dt * 1000;
@@ -762,7 +754,6 @@ const App: React.FC = () => {
           addFloatingText(ent.x, ent.y, TRANSLATIONS[engine.settings.language]['growth_stage'], '#10b981');
         }
       }
-
       if (ent.health <= 0 && ent.type !== 'loot_bag' && ent.type !== 'player') {
           const gatherInfo = GATHER_ITEM_QUANTITY[ent.type as keyof typeof GATHER_ITEM_QUANTITY];
           if (gatherInfo) {
@@ -773,16 +764,13 @@ const App: React.FC = () => {
           engine.entities.splice(i, 1);
           continue;
       }
-      
       if ((ent.type === 'deer' || ent.type === 'rabbit' || ent.type === 'villager')) {
           if (!ent.aiState) ent.aiState = 'idle';
           if (!ent.lastAiTick) ent.lastAiTick = now;
           if (ent.interactionAnim === undefined) ent.interactionAnim = 0;
           if (ent.interactionAnim > 0) ent.interactionAnim -= dt;
-
           const isVillager = ent.type === 'villager';
           const wanderTime = isVillager ? 6000 : 3000;
-
           if (isVillager) {
               if (ent.aiState === 'idle') {
                 if (now - ent.lastAiTick > wanderTime + Math.random() * 5000) {
@@ -850,7 +838,6 @@ const App: React.FC = () => {
                   if (!ent.targetVillage) { ent.aiState = 'idle'; return; }
                   const targetX = ent.targetVillage.cx * CHUNK_SIZE + 8.5;
                   const targetY = ent.targetVillage.cy * CHUNK_SIZE + 8.5;
-                  
                   const dx = targetX - ent.x, dy = targetY - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
                   if (dist < 0.5) {
                       ent.homeVillage = ent.targetVillage;
@@ -922,7 +909,6 @@ const App: React.FC = () => {
       const isRoadChunkX = cx % 10 === 0;
       const isRoadChunkY = cy % 10 === 0;
       const isVillageChunk = isRoadChunkX && isRoadChunkY;
-
       for(let x=0; x<CHUNK_SIZE; x++) {
           chunk[x] = [];
           for(let y=0; y<CHUNK_SIZE; y++) {
@@ -1006,8 +992,8 @@ const App: React.FC = () => {
     const recipe = RECIPES.find(r => r.id === recipeId);
     if (recipe) {
         const engine = gameState.current;
-        const needsWorkbench = recipe.workbenchLevelRequired !== undefined;
-        const hasWorkbenchLevel = !needsWorkbench || (isNearWorkbench && currentWorkbenchLevel >= (recipe.workbenchLevelRequired || 0));
+        const recipeWBLevel = recipe.workbenchLevelRequired || 0;
+        const hasWorkbenchLevel = !recipe.workbenchLevelRequired || (isNearWorkbench && currentWorkbenchLevel >= recipeWBLevel);
 
         const canCraftMultiple = Object.entries(recipe.ingredients).every(([id, qty]) => {
             const item = engine.inventory.find(i => i.id === id);
