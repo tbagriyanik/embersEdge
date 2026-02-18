@@ -246,7 +246,7 @@ const App: React.FC = () => {
 
       if (canUpgrade) {
           Object.entries(costConfig).forEach(([id, qty]) => {
-              const item = engine.inventory.find(i => i.id === id);
+              const item = engine.inventory.find(i => id === id);
               if (item) {
                   item.quantity -= (qty as number);
                   if (item.quantity <= 0) {
@@ -295,11 +295,11 @@ const App: React.FC = () => {
         } else if (item.type === 'tool' || item.type === 'weapon') {
             engine.playerStats.equippedItemId = engine.playerStats.equippedItemId === item.id ? null : item.id;
             SoundManager.playUI('equip');
-        } else if (item.type === 'structure' || item.placeEntity) {
+        } else if (item.type === 'structure' || item.placeEntity || item.placeTile) {
             const facing = engine.playerStats.facing;
             let ox = 0, oy = 0;
             if (facing === 'nw') { ox = -1.5; oy = -1.5; } else if (facing === 'ne') { ox = 1.5; oy = -1.5; } else if (facing === 'sw') { ox = -1.5; oy = 1.5; } else { ox = 1.5; oy = 1.5; }
-            handleAction('place', { x: engine.playerPos.x + ox, y: engine.playerPos.y + oy, type: item.placeEntity });
+            handleAction('place', { x: engine.playerPos.x + ox, y: engine.playerPos.y + oy, type: item.placeEntity || 'tile_placer', tile: item.placeTile, itemUniqueId: item.uniqueId });
         }
     } else if (action === 'assign_quickslot') {
         const { uniqueId, slotIdx } = data;
@@ -330,7 +330,33 @@ const App: React.FC = () => {
             showMessage(t('out_of_arrows'));
         }
     } else if (action === 'place') {
-        const { x, y, type } = data;
+        const { x, y, type, tile, itemUniqueId } = data;
+
+        // Tile placing logic
+        if (tile) {
+          const cx = Math.floor(x / CHUNK_SIZE);
+          const cy = Math.floor(y / CHUNK_SIZE);
+          const key = `${cx},${cy}`;
+          if (engine.chunks[key]) {
+            const lx = ((Math.floor(x) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            const ly = ((Math.floor(y) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            engine.chunks[key][lx][ly] = tile;
+            SoundManager.play('build');
+            showMessage(t('placed') + " " + t(tile));
+            
+            // Consume item
+            const item = engine.inventory.find(i => i.uniqueId === itemUniqueId);
+            if (item) {
+              item.quantity--;
+              if (item.quantity <= 0) {
+                engine.quickSlots = engine.quickSlots.map(uid => uid === item.uniqueId ? null : uid);
+                engine.inventory = engine.inventory.filter(i => i.uniqueId !== item.uniqueId);
+              }
+            }
+            setUiState(prev => prev + 1);
+            return;
+          }
+        }
 
         // Restriction check for villages
         const restrictedInVillage: EntityType[] = ['campfire', 'tent', 'hut', 'workbench'];
@@ -954,7 +980,7 @@ const App: React.FC = () => {
         });
 
         // Add output for all repetitions
-        if (recipe.output.type === 'structure') {
+        if (recipe.output.type === 'structure' && recipe.output.placeEntity) {
             // Placing structures usually only makes sense one at a time via this UI, 
             // but we'll honor multiple if it's somehow called.
             for (let i = 0; i < multiple; i++) {

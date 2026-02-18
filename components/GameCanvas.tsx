@@ -48,7 +48,9 @@ const getAssetImage = (type: string): HTMLImageElement | null => {
 
 export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntityType }) => {
   const grassImgRef = useRef<HTMLImageElement | null>(null);
+  const artGrassImgRef = useRef<HTMLImageElement | null>(null);
   const [grassLoaded, setGrassLoaded] = useState(false);
+  const [artGrassLoaded, setArtGrassLoaded] = useState(false);
 
   useEffect(() => {
     const img = new Image();
@@ -56,6 +58,13 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
     img.onload = () => {
       grassImgRef.current = img;
       setGrassLoaded(true);
+    };
+
+    const artImg = new Image();
+    artImg.src = 'artificial_grass.jpg';
+    artImg.onload = () => {
+      artGrassImgRef.current = artImg;
+      setArtGrassLoaded(true);
     };
   }, []);
 
@@ -160,8 +169,13 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
 
           if (tile === 'grass' && grassImgRef.current && grassLoaded) {
             ctx.drawImage(grassImgRef.current, screenX, screenY, tw + 1, th + 1);
+            // Apply a slight darkening overlay to the image as well
+            ctx.fillStyle = 'rgba(0, 50, 0, 0.2)';
+            ctx.fillRect(screenX, screenY, tw + 1, th + 1);
+          } else if (tile === 'artificial_grass' && artGrassImgRef.current && artGrassLoaded) {
+            ctx.drawImage(artGrassImgRef.current, screenX, screenY, tw + 1, th + 1);
           } else {
-            let color = '#15803d'; 
+            let color = '#064e3b'; // DARKER GREEN GRASS
             if (tile === 'water') color = '#1d4ed8';
             else if (tile === 'sand') color = '#f59e0b';
             else if (tile === 'snow_tile') color = '#f8fafc';
@@ -245,10 +259,20 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
       floatingTexts.forEach(ft => {
         const screenX = (ft.x - playerPos.x) * tw + tw/2;
         const screenY = (ft.y - playerPos.y) * th + th/2;
-        ctx.fillStyle = ft.color;
+        
+        ctx.save();
         ctx.font = `bold ${14 * zoom}px Inter, sans-serif`;
         ctx.textAlign = 'center';
+        
+        // DRAW BLACK BORDER (STROKE)
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 3 * zoom;
+        ctx.strokeText(ft.text, screenX, screenY);
+        
+        // DRAW FILL TEXT
+        ctx.fillStyle = ft.color;
         ctx.fillText(ft.text, screenX, screenY);
+        ctx.restore();
       });
 
       ctx.restore();
@@ -271,7 +295,7 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
 
     render();
     return () => cancelAnimationFrame(animFrame);
-  }, [gameState, canvasRef, grassLoaded]);
+  }, [gameState, canvasRef, grassLoaded, artGrassLoaded]);
 
   useEffect(() => {
     const handleResize = () => {

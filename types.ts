@@ -1,7 +1,7 @@
 
 export type ResourceType = 'wood' | 'stone' | 'berry' | 'water' | 'meat' | 'iron' | 'herb' | 'gold';
 export type WeatherType = 'clear' | 'rain' | 'fog' | 'snow';
-export type TileType = 'grass' | 'sand' | 'water' | 'snow_tile' | 'desert_tile' | 'stone' | 'road_tile';
+export type TileType = 'grass' | 'sand' | 'water' | 'snow_tile' | 'desert_tile' | 'stone' | 'road_tile' | 'artificial_grass';
 export type FacingDirection = 'se' | 'sw' | 'ne' | 'nw';
 export type Language = 'en' | 'tr';
 export type Gender = 'male' | 'female';
@@ -25,6 +25,7 @@ export interface Item {
   durability?: number;
   maxDurability?: number;
   placeEntity?: EntityType;
+  placeTile?: TileType;
   effect?: {
     hunger?: number;
     thirst?: number;
@@ -53,7 +54,7 @@ export type EntityType =
   | 'scorpion' | 'bear' | 'crab'
   | 'bridge' | 'road' | 'stone_wall' | 'watchtower' | 'castle_gate'
   | 'flower' | 'iron_ore' | 'axe_tool' | 'pickaxe_tool' | 'sword_tool' | 'grass_clump'
-  | 'villager' | 'shopkeeper' | 'house_village';
+  | 'villager' | 'shopkeeper' | 'house_village' | 'tile_placer';
 
 export interface Entity {
   id: string;
