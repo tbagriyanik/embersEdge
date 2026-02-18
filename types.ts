@@ -69,7 +69,7 @@ export interface Entity {
   targetY?: number;
   isFleeing?: boolean;
   spawnTime?: number;
-  aiState?: 'idle' | 'grazing' | 'fleeing' | 'chasing' | 'attacking' | 'wandering' | 'traveling';
+  aiState?: 'idle' | 'grazing' | 'fleeing' | 'chasing' | 'attacking' | 'wandering' | 'traveling' | 'working';
   lastAiTick?: number;
   attackCooldown?: number;
   damage?: number;
@@ -80,6 +80,8 @@ export interface Entity {
   dialogueIndex?: number;
   homeVillage?: { cx: number; cy: number };
   targetVillage?: { cx: number; cy: number };
+  targetEntityId?: string;
+  interactionAnim?: number;
 }
 
 export interface Projectile {

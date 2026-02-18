@@ -14,7 +14,6 @@ const ASSETS_SVG: Record<string, string> = {
   axe_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="40" width="10" height="60" rx="5" fill="#78350f"/><path d="M45 20 L75 10 L75 50 L45 40 Z" fill="#94a3b8"/><path d="M45 20 L25 10 L25 50 L45 40 Z" fill="#64748b"/></svg>`,
   pickaxe_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="40" width="10" height="60" rx="5" fill="#78350f"/><path d="M10 30 Q50 10 90 30 L90 45 Q50 25 10 45 Z" fill="#94a3b8"/></svg>`,
   hoe_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="40" width="8" height="60" rx="4" fill="#78350f"/><rect x="20" y="35" width="40" height="12" rx="4" fill="#94a3b8"/></svg>`,
-  seed_item: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="60" r="15" fill="#8b5cf6"/><path d="M50 45 Q60 30 50 10 Q40 30 50 45" fill="#15803d"/></svg>`,
   tree_oak: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="80" width="10" height="30" fill="#451a03"/><circle cx="50" cy="50" r="40" fill="#15803d"/><circle cx="30" cy="60" r="25" fill="#166534"/><circle cx="70" cy="60" r="25" fill="#166534"/><circle cx="50" cy="30" r="25" fill="#166534"/></svg>`,
   tree_pine: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="80" width="10" height="40" fill="#451a03"/><path d="M50 10 L85 80 L15 80 Z" fill="#065f46"/><path d="M50 30 L75 70 L25 70 Z" fill="#064e3b"/><path d="M50 50 L65 60 L35 60 Z" fill="#022c22"/></svg>`,
   rock_standard: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M10 80 L30 30 L70 20 L90 80 Z" fill="#44403c"/><path d="M30 30 L50 60 L70 20 Z" fill="#57534e"/></svg>`,
@@ -25,13 +24,20 @@ const ASSETS_SVG: Record<string, string> = {
   campfire: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="30" y="70" width="40" height="10" fill="#451a03" transform="rotate(20 50 75)"/><rect x="30" y="70" width="40" height="10" fill="#451a03" transform="rotate(-20 50 75)"/><path d="M50 20 Q70 60 50 80 Q30 60 50 20" fill="#f59e0b"/><path d="M50 40 Q60 60 50 75 Q40 60 50 40" fill="#ef4444"/></svg>`,
   workbench: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="40" width="60" height="40" fill="#78350f"/><rect x="15" y="35" width="70" height="10" fill="#451a03"/><rect x="30" y="50" width="10" height="10" fill="#94a3b8"/></svg>`,
   tent: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M10 80 L50 20 L90 80 Z" fill="#92400e"/><path d="M50 20 L50 80" stroke="rgba(0,0,0,0.2)" stroke-width="2"/></svg>`,
-  hut: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="50" width="60" height="40" fill="#78350f"/><path d="M10 50 L50 10 L90 50 Z" fill="#451a03"/><rect x="45" y="70" width="10" height="20" fill="#312e81"/></svg>`,
+  hut: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="50" width="60" height="40" fill="#78350f"/><path d="M10 50 L50 10 L90 50 Z" fill="#7f1d1d"/><rect x="45" y="70" width="10" height="20" fill="#312e81"/></svg>`,
   shopkeeper: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="30" r="15" fill="#fef3c7"/><rect x="35" y="45" width="30" height="40" rx="5" fill="#312e81"/><path d="M30 45 L50 10 L70 45" fill="#1e1b4b"/></svg>`,
   villager: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="30" r="15" fill="#fef3c7"/><rect x="35" y="45" width="30" height="40" rx="5" fill="#15803d"/></svg>`,
   house_village: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="40" width="80" height="50" fill="#a8a29e"/><path d="0 40 L50 0 L100 40 Z" fill="#7f1d1d"/><rect x="40" y="65" width="20" height="25" fill="#451a03"/></svg>`,
   loot_bag: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M30 80 Q50 90 70 80 L75 40 Q50 30 25 40 Z" fill="#78350f"/><path d="M30 40 Q50 35 70 40" stroke="#f59e0b" stroke-width="4" fill="none"/></svg>`,
-  farm_plot: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="#451a03" rx="10"/><rect x="15" y="15" width="70" height="70" fill="#2d1a12" rx="5"/></svg>`,
+  farm_plot: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="#451a03" rx="10"/><rect x="15" y="15" width="70" height="70" fill="#2d1a12" rx="5"/><path d="M20 25 L80 25 M20 40 L80 40 M20 55 L80 55 M20 70 L80 70" stroke="rgba(255,255,255,0.05)" stroke-width="2"/></svg>`,
   grass_clump: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 90 L30 40 M50 90 L50 30 M50 90 L70 40" stroke="#15803d" stroke-width="6" fill="none" stroke-linecap="round"/></svg>`,
+  
+  // Crop Growth Stages
+  berry_stage_1: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q45 70 50 60 Q55 70 50 85" fill="#15803d"/></svg>`,
+  berry_stage_2: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q35 60 50 40 Q65 60 50 85" fill="#15803d"/><path d="M50 85 Q55 65 70 60" stroke="#15803d" stroke-width="4" fill="none"/></svg>`,
+  berry_stage_3: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="60" r="15" fill="#15803d"/><circle cx="35" cy="70" r="10" fill="#15803d"/><circle cx="65" cy="70" r="10" fill="#15803d"/><circle cx="50" cy="45" r="5" fill="#fdf2f8" stroke="#f472b6" stroke-width="1"/></svg>`,
+  berry_stage_4: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="60" r="22" fill="#166534"/><circle cx="35" cy="65" r="6" fill="#a855f7"/><circle cx="65" cy="65" r="6" fill="#a855f7"/><circle cx="50" cy="45" r="6" fill="#a855f7"/></svg>`,
+  berry_stage_5: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="55" r="32" fill="#14532d"/><circle cx="30" cy="60" r="8" fill="#7c3aed"/><circle cx="70" cy="60" r="8" fill="#7c3aed"/><circle cx="50" cy="35" r="8" fill="#7c3aed"/><circle cx="50" cy="75" r="8" fill="#7c3aed"/><circle cx="35" cy="40" r="6" fill="#7c3aed"/><circle cx="65" cy="40" r="6" fill="#7c3aed"/></svg>`,
 };
 
 const IMAGE_CACHE: Record<string, HTMLImageElement> = {};
@@ -143,10 +149,13 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
       ctx.save();
       ctx.translate(width / 2 + cameraOffsetX, height / 2 + cameraOffsetY);
 
-      const startX = Math.floor(playerPos.x - (width / tw / 2) - 2);
-      const endX = Math.ceil(playerPos.x + (width / tw / 2) + 2);
-      const startY = Math.floor(playerPos.y - (height / th / 2) - 2);
-      const endY = Math.ceil(playerPos.y + (height / th / 2) + 2);
+      // CRITICAL FIX: Calculate tile bounds accounting for camera pan and zoom
+      // startX/Y: Coordinate mapping to screen edge 0
+      // endX/Y: Coordinate mapping to screen edge width/height
+      const startX = Math.floor(playerPos.x - (width / 2 + cameraOffsetX) / tw - 2);
+      const endX = Math.ceil(playerPos.x + (width / 2 - cameraOffsetX) / tw + 2);
+      const startY = Math.floor(playerPos.y - (height / 2 + cameraOffsetY) / th - 2);
+      const endY = Math.ceil(playerPos.y + (height / 2 - cameraOffsetY) / th + 2);
 
       for (let x = startX; x <= endX; x++) {
         for (let y = startY; y <= endY; y++) {
@@ -169,13 +178,12 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
 
           if (tile === 'grass' && grassImgRef.current && grassLoaded) {
             ctx.drawImage(grassImgRef.current, screenX, screenY, tw + 1, th + 1);
-            // Apply a slight darkening overlay to the image as well
             ctx.fillStyle = 'rgba(0, 50, 0, 0.2)';
             ctx.fillRect(screenX, screenY, tw + 1, th + 1);
           } else if (tile === 'artificial_grass' && artGrassImgRef.current && artGrassLoaded) {
             ctx.drawImage(artGrassImgRef.current, screenX, screenY, tw + 1, th + 1);
           } else {
-            let color = '#064e3b'; // DARKER GREEN GRASS
+            let color = '#064e3b';
             if (tile === 'water') color = '#1d4ed8';
             else if (tile === 'sand') color = '#f59e0b';
             else if (tile === 'snow_tile') color = '#f8fafc';
@@ -211,6 +219,12 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
                 ctx.scale(-1, 1);
                 ctx.translate(-screenX, -screenY);
             }
+
+            // Interaction animation (bobbing) for villagers working
+            const bob = (ent.type === 'villager' && ent.interactionAnim && ent.interactionAnim > 0) 
+                ? Math.sin(Date.now() / 100) * 5 * zoom 
+                : 0;
+            ctx.translate(0, bob);
             
             if (ent.health < ent.maxHealth) {
               ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -220,8 +234,14 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
             }
 
             if (ent.type === 'farm_plot' && ent.growthStage) {
-                const growthImg = getAssetImage(ent.growthStage === 3 ? 'bush_berry' : 'seed_item');
-                if (growthImg) ctx.drawImage(growthImg, screenX - 15*zoom, screenY - 15*zoom, 30*zoom, 30*zoom);
+                ctx.save();
+                ctx.translate(screenX, screenY);
+                const stageImg = getAssetImage(`berry_stage_${ent.growthStage}`);
+                if (stageImg) {
+                    const cropSize = 64 * zoom;
+                    ctx.drawImage(stageImg, -cropSize/2, -cropSize * 0.8, cropSize, cropSize);
+                }
+                ctx.restore();
             }
 
             ctx.drawImage(img, screenX - size/2, screenY - size * 0.8, size, size);
@@ -264,12 +284,10 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
         ctx.font = `bold ${14 * zoom}px Inter, sans-serif`;
         ctx.textAlign = 'center';
         
-        // DRAW BLACK BORDER (STROKE)
         ctx.strokeStyle = 'black';
         ctx.lineWidth = 3 * zoom;
         ctx.strokeText(ft.text, screenX, screenY);
         
-        // DRAW FILL TEXT
         ctx.fillStyle = ft.color;
         ctx.fillText(ft.text, screenX, screenY);
         ctx.restore();

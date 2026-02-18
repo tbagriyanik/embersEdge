@@ -109,22 +109,27 @@ const App: React.FC = () => {
     const inventory = engine.inventory;
     const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
 
+    const finalQuantity = itemProto.id === 'gold_coin' ? Math.floor(quantity) : quantity;
+    if (finalQuantity <= 0 && itemProto.id === 'gold_coin') return true;
+
     const existing = inventory.find(i => i.id === itemProto.id && i.stackable && (i.quantity < (i.maxStack || 99)));
     
     if (existing) {
-      existing.quantity += quantity;
+      existing.quantity += finalQuantity;
     } else {
-      if (inventory.length >= MAX_INVENTORY_SLOTS) {
+      const physicalItemsCount = inventory.filter(i => i.type !== 'currency').length;
+      if (itemProto.type !== 'currency' && physicalItemsCount >= MAX_INVENTORY_SLOTS) {
         showMessage(t('inv_full'));
         return false;
       }
 
       const newUniqueId = `${itemProto.id}-${Math.random()}`;
-      const newItem = { ...itemProto, quantity, uniqueId: newUniqueId };
+      const newItem = { ...itemProto, quantity: finalQuantity, uniqueId: newUniqueId };
       inventory.push(newItem);
 
+      // Money cannot be put to quick slots
       const autoSlotTypes = ['tool', 'weapon', 'food', 'structure'];
-      if (autoSlotTypes.includes(newItem.type)) {
+      if (newItem.type !== 'currency' && autoSlotTypes.includes(newItem.type)) {
           const emptySlotIdx = engine.quickSlots.findIndex(slot => slot === null);
           if (emptySlotIdx !== -1) {
               engine.quickSlots[emptySlotIdx] = newUniqueId;
@@ -305,6 +310,8 @@ const App: React.FC = () => {
         const { uniqueId, slotIdx } = data;
         const item = engine.inventory.find(i => i.uniqueId === uniqueId);
         if (item) {
+          // Money cannot be put to quick slots
+          if (item.type === 'currency') return;
           engine.quickSlots = engine.quickSlots.map(uid => uid === uniqueId ? null : uid);
           engine.quickSlots[slotIdx] = uniqueId;
           SoundManager.playUI('click');
@@ -385,7 +392,7 @@ const App: React.FC = () => {
         engine.inventory.splice(toIdx, 0, movedItem);
     }
     setUiState(prev => prev + 1);
-  }, [isLocationInVillage]);
+  }, [isLocationInVillage, addItemToInventory]);
 
   const handleQuickSlotActivated = useCallback((slotIndex: number) => {
     const engine = gameState.current;
@@ -430,22 +437,22 @@ const App: React.FC = () => {
               engine.inventory.splice(engine.inventory.indexOf(seeds), 1);
             }
             entity.growthStage = 1;
-            entity.growthTimer = 3000;
+            entity.growthTimer = 10000;
             showMessage(t('planted'));
             SoundManager.play('build');
           } else {
             showMessage(t('berry_seed') + " ?");
           }
-        } else if (entity.growthStage === 3) {
+        } else if (entity.growthStage === 5) {
           entity.growthStage = undefined;
           entity.growthTimer = undefined;
           
-          addItemToInventory(ITEMS.berry, 3);
+          addItemToInventory(ITEMS.berry, 5);
           addItemToInventory(ITEMS.berry_seed, 1);
 
           showMessage(t('harvested'));
           SoundManager.play('eat');
-          addFloatingText(entity.x, entity.y, "+3 Berry", "#fbbf24");
+          addFloatingText(entity.x, entity.y, "+5 Berry", "#fbbf24");
         }
         setUiState(p => p + 1);
         return;
@@ -728,13 +735,14 @@ const App: React.FC = () => {
     for (let i = engine.entities.length - 1; i >= 0; i--) {
       const ent = engine.entities[i];
       
-      if (ent.type === 'farm_plot' && ent.growthStage && ent.growthStage < 3) {
-        if (!ent.growthTimer) ent.growthTimer = 3000;
+      if (ent.type === 'farm_plot' && ent.growthStage && ent.growthStage < 5) {
+        if (!ent.growthTimer) ent.growthTimer = 10000;
         ent.growthTimer -= dt * 1000;
         if (ent.growthTimer <= 0) {
           ent.growthStage++;
-          ent.growthTimer = 3000;
+          ent.growthTimer = 10000;
           spawnParticles(ent.x, ent.y, 'leaf', 5, '#15803d', 0.8);
+          addFloatingText(ent.x, ent.y, TRANSLATIONS[engine.settings.language]['growth_stage'], '#10b981');
         }
       }
 
@@ -753,6 +761,9 @@ const App: React.FC = () => {
       if ((ent.type === 'deer' || ent.type === 'rabbit' || ent.type === 'villager')) {
           if (!ent.aiState) ent.aiState = 'idle';
           if (!ent.lastAiTick) ent.lastAiTick = now;
+          if (ent.interactionAnim === undefined) ent.interactionAnim = 0;
+          if (ent.interactionAnim > 0) ent.interactionAnim -= dt;
+
           const isVillager = ent.type === 'villager';
           const wanderTime = isVillager ? 6000 : 3000;
 
@@ -760,10 +771,22 @@ const App: React.FC = () => {
               // VILLAGER AI LOGIC
               if (ent.aiState === 'idle') {
                 if (now - ent.lastAiTick > wanderTime + Math.random() * 5000) {
-                    // Decide: Wander locally or Travel to next village?
                     const r = Math.random();
-                    if (r < 0.2 && ent.homeVillage) {
-                        // Picking a neighboring target village
+                    // Decision: Travel, Work, or Wander?
+                    if (r < 0.3) {
+                        // Look for a nearby farm plot to work on
+                        const plot = engine.entities.find(p => p.type === 'farm_plot' && 
+                            Math.abs(p.x - ent.x) < 8 && Math.abs(p.y - ent.y) < 8 && 
+                            (p.growthStage || 0) < 5);
+                        if (plot) {
+                            ent.aiState = 'working';
+                            ent.targetX = plot.x;
+                            ent.targetY = plot.y;
+                            ent.targetEntityId = plot.id;
+                        } else {
+                            ent.aiState = 'wandering';
+                        }
+                    } else if (r < 0.5 && ent.homeVillage) {
                         const neighbors = [
                             { cx: ent.homeVillage.cx + 10, cy: ent.homeVillage.cy },
                             { cx: ent.homeVillage.cx - 10, cy: ent.homeVillage.cy },
@@ -772,14 +795,12 @@ const App: React.FC = () => {
                         ];
                         ent.targetVillage = neighbors[Math.floor(Math.random() * neighbors.length)];
                         ent.aiState = 'traveling';
-                        // Move to road center first
                         const roadWorldCenterLocal = 8.5;
-                        const alongRoad = ent.targetVillage.cx !== ent.homeVillage.cx; // True if horizontal move
+                        const alongRoad = ent.targetVillage.cx !== ent.homeVillage.cx;
                         ent.targetX = alongRoad ? ent.x : (ent.homeVillage.cx * CHUNK_SIZE + roadWorldCenterLocal);
                         ent.targetY = alongRoad ? (ent.homeVillage.cy * CHUNK_SIZE + roadWorldCenterLocal) : ent.y;
                     } else {
                         ent.aiState = 'wandering';
-                        // Keep within village bounds (roughly 8-tile radius from center)
                         const centerX = (ent.homeVillage?.cx || 0) * CHUNK_SIZE + 8.5;
                         const centerY = (ent.homeVillage?.cy || 0) * CHUNK_SIZE + 8.5;
                         ent.targetX = centerX + (Math.random() - 0.5) * 12;
@@ -795,6 +816,24 @@ const App: React.FC = () => {
                       ent.x += (dx/dist)*speed*dt; ent.y += (dy/dist)*speed*dt;
                       ent.facing = dx > 0 ? 'right' : 'left';
                   }
+              } else if (ent.aiState === 'working') {
+                  const dx = ent.targetX! - ent.x, dy = ent.targetY! - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
+                  if (dist < 0.8) {
+                      // Working on the plot
+                      if (Math.random() < 0.05) {
+                          ent.interactionAnim = 0.5;
+                          const targetPlot = engine.entities.find(p => p.id === ent.targetEntityId);
+                          if (targetPlot && targetPlot.type === 'farm_plot' && targetPlot.growthTimer) {
+                              targetPlot.growthTimer -= 2000; // Speed up growth
+                              spawnParticles(targetPlot.x, targetPlot.y, 'leaf', 2, '#15803d', 0.5);
+                          }
+                      }
+                      if (now - ent.lastAiTick > 10000) { ent.aiState = 'idle'; ent.lastAiTick = now; }
+                  } else {
+                      const speed = 2.0;
+                      ent.x += (dx/dist)*speed*dt; ent.y += (dy/dist)*speed*dt;
+                      ent.facing = dx > 0 ? 'right' : 'left';
+                  }
               } else if (ent.aiState === 'traveling') {
                   if (!ent.targetVillage) { ent.aiState = 'idle'; return; }
                   const targetX = ent.targetVillage.cx * CHUNK_SIZE + 8.5;
@@ -802,28 +841,20 @@ const App: React.FC = () => {
                   
                   const dx = targetX - ent.x, dy = targetY - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
                   if (dist < 0.5) {
-                      // Arrived at target village! Swap home and idle
                       ent.homeVillage = ent.targetVillage;
                       ent.targetVillage = undefined;
                       ent.aiState = 'idle';
                       ent.lastAiTick = now;
                   } else {
-                      // Alignment step: villagers favor road centers
                       const speed = 2.5;
                       const roadX = Math.floor(ent.x / CHUNK_SIZE) * CHUNK_SIZE + 8.5;
                       const roadY = Math.floor(ent.y / CHUNK_SIZE) * CHUNK_SIZE + 8.5;
-
-                      // Move along the major axis of the road
                       if (Math.abs(targetX - ent.x) > 0.5) {
-                          // Horizontal road movement
                           ent.x += (targetX > ent.x ? 1 : -1) * speed * dt;
-                          // Smooth alignment to road Y
                           ent.y += (roadY - ent.y) * 2 * dt;
                           ent.facing = targetX > ent.x ? 'right' : 'left';
                       } else {
-                          // Vertical road movement
                           ent.y += (targetY > ent.y ? 1 : -1) * speed * dt;
-                          // Smooth alignment to road X
                           ent.x += (roadX - ent.x) * 2 * dt;
                           ent.facing = targetX > ent.x ? 'right' : 'left';
                       }
@@ -892,6 +923,20 @@ const App: React.FC = () => {
                   chunk[x][y] = 'stone';
                   if (x === 8 && y === 8) gameState.current.entities.push({ id: `shop-${cx}-${cy}`, x: wx + 0.5, y: wy + 0.5, type: 'shopkeeper', health: 1000, maxHealth: 1000, level: 1 });
                   else if ((x === 6 || x === 10) && (y === 6 || y === 10)) gameState.current.entities.push({ id: `h-${cx}-${cy}-${x}-${y}`, x: wx + 0.5, y: wy + 0.5, type: 'house_village', health: 500, maxHealth: 500, level: 1 });
+                  else if ((x === 6 && y === 8) || (x === 10 && y === 8)) {
+                      // Spawn village fields
+                      gameState.current.entities.push({ 
+                          id: `f-${cx}-${cy}-${x}-${y}`, 
+                          x: wx + 0.5, 
+                          y: wy + 0.5, 
+                          type: 'farm_plot', 
+                          health: 100, 
+                          maxHealth: 100, 
+                          growthStage: 1, 
+                          growthTimer: 10000,
+                          level: 1 
+                      });
+                  }
                   else if (Math.random() < 0.1) {
                       gameState.current.entities.push({ 
                           id: `v-${cx}-${cy}-${x}-${y}`, 
@@ -924,7 +969,7 @@ const App: React.FC = () => {
       }
       return chunk;
   };
-
+  // rest of component...
   const startNewGame = () => {
     gameState.current.playerPos = { x: 0, y: 0 };
     gameState.current.playerStats = { ...INITIAL_STATS, character: gameState.current.playerStats.character };

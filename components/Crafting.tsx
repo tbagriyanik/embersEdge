@@ -2,6 +2,7 @@
 import React from 'react';
 import { Item, Recipe } from '../types';
 import { RECIPES, TRANSLATIONS } from '../constants';
+import { formatAbbreviatedNumber } from './HUD';
 
 interface Props {
   inventory: Item[];
@@ -58,7 +59,7 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
         <div className="flex gap-4 mb-3">
           <div className="w-12 h-12 bg-black/40 rounded-xl flex items-center justify-center text-2xl shadow-inner relative">
             {recipe.output.icon}
-            {recipe.output.quantity > 1 && <span className="absolute -bottom-1 -right-1 bg-amber-500 text-[9px] font-black px-1.5 rounded-full border border-stone-900 text-stone-950">x{recipe.output.quantity}</span>}
+            {recipe.output.quantity >= 1 && <span className="absolute -bottom-1 -right-1 bg-amber-500 text-[9px] font-black px-1.5 rounded-full border border-stone-900 text-stone-950">x{recipe.output.id === 'gold_coin' ? formatAbbreviatedNumber(recipe.output.quantity) : recipe.output.quantity}</span>}
           </div>
           <div className="flex-1 overflow-hidden">
             <h3 className="text-[13px] font-black text-white uppercase truncate tracking-tight">{recipe.name}</h3>
@@ -72,7 +73,9 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
             return (
               <div key={id} className="flex gap-1.5 items-center text-[11px] font-black uppercase tracking-tight">
                 <span className="text-white/30">{t(id)}</span>
-                <span className={has >= (qty as number) ? 'text-emerald-400' : 'text-red-500'}>{has}/{qty}</span>
+                <span className={has >= (qty as number) ? 'text-emerald-400' : 'text-red-500'}>
+                  {id === 'gold_coin' ? formatAbbreviatedNumber(has) : has}/{id === 'gold_coin' ? formatAbbreviatedNumber(qty as number) : qty}
+                </span>
               </div>
             );
           })}
@@ -106,7 +109,7 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
               <div className="h-4 w-px bg-white/10" />
               <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 rounded-full border border-amber-500/20">
                 <span className="text-xl">🪙</span>
-                <span className="text-[14px] font-black text-amber-500">{goldCoins}</span>
+                <span className="text-[14px] font-black text-amber-500">{formatAbbreviatedNumber(goldCoins)}</span>
               </div>
             </div>
           </div>

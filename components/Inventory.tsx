@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Item, Language } from '../types';
 import { TRANSLATIONS, MAX_INVENTORY_SLOTS } from '../constants';
+import { formatAbbreviatedNumber } from './HUD';
 
 interface Props {
   items: Item[];
@@ -24,6 +25,8 @@ export const Inventory: React.FC<Props> = ({ items, quickSlots, equippedItemId, 
   const goldCoins = items
     .filter(i => i.id === 'gold_coin')
     .reduce((sum, i) => sum + i.quantity, 0);
+
+  const physicalItemsCount = items.filter(i => i.type !== 'currency').length;
 
   const handlePointerMove = (e: React.PointerEvent) => {
     setMousePos({ x: e.clientX, y: e.clientY });
@@ -79,7 +82,8 @@ export const Inventory: React.FC<Props> = ({ items, quickSlots, equippedItemId, 
 
   const equipment = items.filter(i => i.type === 'tool' || i.type === 'weapon');
   const consumables = items.filter(i => i.type === 'food');
-  const otherItems = items.filter(i => i.type !== 'tool' && i.type !== 'weapon' && i.type !== 'food');
+  // Money is excluded from Resources
+  const otherItems = items.filter(i => i.type !== 'tool' && i.type !== 'weapon' && i.type !== 'food' && i.type !== 'currency');
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md select-none" onPointerMove={handlePointerMove}>
@@ -93,12 +97,12 @@ export const Inventory: React.FC<Props> = ({ items, quickSlots, equippedItemId, 
             </h2>
             <div className="flex items-center gap-3 mt-1">
               <span className="text-[10px] font-black uppercase text-white/30 tracking-widest">
-                {items.length} / {MAX_INVENTORY_SLOTS} {t('slots')}
+                {physicalItemsCount} / {MAX_INVENTORY_SLOTS} {t('slots')}
               </span>
               <div className="h-3 w-px bg-white/10" />
               <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/10 rounded-full border border-amber-500/20">
                 <span className="text-lg">🪙</span>
-                <span className="text-[13px] font-black text-amber-500">{goldCoins}</span>
+                <span className="text-[13px] font-black text-amber-500">{formatAbbreviatedNumber(goldCoins)}</span>
               </div>
             </div>
           </div>

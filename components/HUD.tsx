@@ -14,12 +14,27 @@ interface Props {
   onOpenSettings: () => void;
 }
 
+export const formatAbbreviatedNumber = (num: number): string => {
+  const value = Math.floor(num);
+  if (value < 1000) return value.toString();
+  const lookup = [
+    { threshold: 1e15, symbol: "q" },
+    { threshold: 1e12, symbol: "t" },
+    { threshold: 1e9, symbol: "b" },
+    { threshold: 1e6, symbol: "m" },
+    { threshold: 1e3, symbol: "k" }
+  ];
+  const item = lookup.find(i => value >= i.threshold);
+  if (!item) return value.toString();
+  const formatted = (value / item.threshold).toFixed(1).replace(/\.0$/, "");
+  return formatted + item.symbol;
+};
+
 export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction, onZoom, onRotate, onOpenSettings }) => {
   const hours = Math.floor((time / 2400) * 24);
   const minutes = Math.floor(((time / 2400) * 24 * 60) % 60);
   const t = (key: string) => TRANSLATIONS[gameState.settings.language][key] || key;
 
-  // Track specifically gold coins for the counter
   const goldCoinsCount = gameState.inventory
     .filter(i => i.id === 'gold_coin')
     .reduce((sum, i) => sum + i.quantity, 0);
@@ -32,10 +47,10 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
   };
 
   const formatQuantity = (total: number, maxStack: number) => {
-    if (total > 999) return '999+';
+    if (total > 999) return formatAbbreviatedNumber(total);
     if (total > 99) return '99+';
     if (total > 50 && maxStack <= 50) return '50+';
-    return total.toString();
+    return Math.floor(total).toString();
   };
 
   const StatBar = ({ label, value, max, color, icon, critical }: any) => {
@@ -102,7 +117,7 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
             </div>
             <div className="flex items-center gap-2 pl-4 border-l border-white/10">
                <span className="text-xl">🪙</span>
-               <span className="text-[14px] font-black text-amber-500">{goldCoinsCount}</span>
+               <span className="text-[14px] font-black text-amber-500">{formatAbbreviatedNumber(goldCoinsCount)}</span>
             </div>
           </div>
         </div>
@@ -118,7 +133,7 @@ export const HUD: React.FC<Props> = ({ stats, time, message, gameState, onAction
       )}
 
       <div className="flex flex-col items-center w-full gap-3 pointer-events-auto mb-4" onMouseDown={e => e.stopPropagation()}>
-        <div className="flex gap-1.5 sm:gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/20 rounded-full shadow-2xl overflow-x-auto max-w-[95vw] no-scrollbar">
+        <div className="flex gap-1.5 sm:gap-2 p-2 bg-black/40 backdrop-blur-3xl border border-white/20 rounded-full shadow-2xl overflow-x-auto no-scrollbar max-w-[95vw]">
           {gameState.quickSlots.map((uniqueId, i) => {
             const item = gameState.inventory.find(invItem => invItem.uniqueId === uniqueId);
             const isEquipped = item && item.id === stats.equippedItemId;
