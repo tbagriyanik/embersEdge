@@ -32,12 +32,12 @@ const ASSETS_SVG: Record<string, string> = {
   farm_plot: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="#451a03" rx="10"/><rect x="15" y="15" width="70" height="70" fill="#2d1a12" rx="5"/><path d="M20 25 L80 25 M20 40 L80 40 M20 55 L80 55 M20 70 L80 70" stroke="rgba(255,255,255,0.05)" stroke-width="2"/></svg>`,
   grass_clump: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 90 L30 40 M50 90 L50 30 M50 90 L70 40" stroke="#15803d" stroke-width="6" fill="none" stroke-linecap="round"/></svg>`,
   
-  // Crop Growth Stages
-  berry_stage_1: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q45 70 50 60 Q55 70 50 85" fill="#15803d"/></svg>`,
-  berry_stage_2: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q35 60 50 40 Q65 60 50 85" fill="#15803d"/><path d="M50 85 Q55 65 70 60" stroke="#15803d" stroke-width="4" fill="none"/></svg>`,
-  berry_stage_3: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="60" r="15" fill="#15803d"/><circle cx="35" cy="70" r="10" fill="#15803d"/><circle cx="65" cy="70" r="10" fill="#15803d"/><circle cx="50" cy="45" r="5" fill="#fdf2f8" stroke="#f472b6" stroke-width="1"/></svg>`,
-  berry_stage_4: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="60" r="22" fill="#166534"/><circle cx="35" cy="65" r="6" fill="#a855f7"/><circle cx="65" cy="65" r="6" fill="#a855f7"/><circle cx="50" cy="45" r="6" fill="#a855f7"/></svg>`,
-  berry_stage_5: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="55" r="32" fill="#14532d"/><circle cx="30" cy="60" r="8" fill="#7c3aed"/><circle cx="70" cy="60" r="8" fill="#7c3aed"/><circle cx="50" cy="35" r="8" fill="#7c3aed"/><circle cx="50" cy="75" r="8" fill="#7c3aed"/><circle cx="35" cy="40" r="6" fill="#7c3aed"/><circle cx="65" cy="40" r="6" fill="#7c3aed"/></svg>`,
+  // Enhanced Crop Growth Stages
+  berry_stage_1: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q48 75 50 70 Q52 75 50 85" fill="#166534"/><path d="M50 72 L45 68" stroke="#166534" stroke-width="2"/></svg>`,
+  berry_stage_2: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q40 65 50 50 Q60 65 50 85" fill="#15803d"/><path d="M50 80 L65 70 M50 75 L35 68" stroke="#15803d" stroke-width="3"/></svg>`,
+  berry_stage_3: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 85 Q30 60 50 40 Q70 60 50 85" fill="#15803d"/><circle cx="40" cy="65" r="4" fill="#a855f7" opacity="0.6"/><circle cx="60" cy="55" r="4" fill="#a855f7" opacity="0.6"/><circle cx="50" cy="45" r="4" fill="#a855f7" opacity="0.6"/></svg>`,
+  berry_stage_4: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="60" r="28" fill="#166534"/><circle cx="35" cy="55" r="7" fill="#9333ea"/><circle cx="65" cy="55" r="7" fill="#9333ea"/><circle cx="50" cy="40" r="7" fill="#9333ea"/><circle cx="50" cy="70" r="6" fill="#9333ea"/></svg>`,
+  berry_stage_5: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="55" r="35" fill="#14532d"/><circle cx="30" cy="60" r="9" fill="#7c3aed"/><circle cx="70" cy="60" r="9" fill="#7c3aed"/><circle cx="50" cy="35" r="9" fill="#7c3aed"/><circle cx="50" cy="75" r="9" fill="#7c3aed"/><circle cx="35" cy="40" r="7" fill="#7c3aed"/><circle cx="65" cy="40" r="7" fill="#7c3aed"/><circle cx="50" cy="55" r="5" fill="#fff" opacity="0.3"/></svg>`,
 };
 
 const IMAGE_CACHE: Record<string, HTMLImageElement> = {};
@@ -140,6 +140,7 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
       const { width, height } = canvas;
       const { playerPos, playerStats, entities, particles, floatingTexts, projectiles, viewConfig, chunks, clickMarker } = gameState;
       const { zoom, cameraOffsetX, cameraOffsetY } = viewConfig;
+      const nowTs = Date.now();
       
       const tw = TILE_WIDTH * zoom;
       const th = TILE_HEIGHT * zoom;
@@ -149,9 +150,6 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
       ctx.save();
       ctx.translate(width / 2 + cameraOffsetX, height / 2 + cameraOffsetY);
 
-      // CRITICAL FIX: Calculate tile bounds accounting for camera pan and zoom
-      // startX/Y: Coordinate mapping to screen edge 0
-      // endX/Y: Coordinate mapping to screen edge width/height
       const startX = Math.floor(playerPos.x - (width / 2 + cameraOffsetX) / tw - 2);
       const endX = Math.ceil(playerPos.x + (width / 2 - cameraOffsetX) / tw + 2);
       const startY = Math.floor(playerPos.y - (height / 2 + cameraOffsetY) / th - 2);
@@ -220,9 +218,8 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
                 ctx.translate(-screenX, -screenY);
             }
 
-            // Interaction animation (bobbing) for villagers working
             const bob = (ent.type === 'villager' && ent.interactionAnim && ent.interactionAnim > 0) 
-                ? Math.sin(Date.now() / 100) * 5 * zoom 
+                ? Math.sin(nowTs / 100) * 5 * zoom 
                 : 0;
             ctx.translate(0, bob);
             
@@ -234,12 +231,33 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
             }
 
             if (ent.type === 'farm_plot' && ent.growthStage) {
+                // Ripe glow effect for stage 5
+                if (ent.growthStage === 5) {
+                    const glowPulse = (Math.sin(nowTs / 300) + 1) / 2;
+                    ctx.save();
+                    ctx.globalAlpha = 0.2 + glowPulse * 0.3;
+                    const grad = ctx.createRadialGradient(screenX, screenY - 30 * zoom, 0, screenX, screenY - 30 * zoom, 40 * zoom);
+                    grad.addColorStop(0, 'rgba(124, 58, 237, 0.8)');
+                    grad.addColorStop(1, 'rgba(124, 58, 237, 0)');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY - 30 * zoom, 40 * zoom, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+
+                    // Bobbing harvest indicator
+                    const hoverBob = Math.sin(nowTs / 400) * 8 * zoom;
+                    ctx.font = `bold ${16 * zoom}px serif`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText('🍇', screenX, screenY - 70 * zoom + hoverBob);
+                }
+
                 ctx.save();
                 ctx.translate(screenX, screenY);
                 const stageImg = getAssetImage(`berry_stage_${ent.growthStage}`);
                 if (stageImg) {
                     const cropSize = 64 * zoom;
-                    ctx.drawImage(stageImg, -cropSize/2, -cropSize * 0.8, cropSize, cropSize);
+                    ctx.drawImage(stageImg, -cropSize/2, -cropSize * 0.85, cropSize, cropSize);
                 }
                 ctx.restore();
             }
