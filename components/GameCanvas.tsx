@@ -6,10 +6,14 @@ import { TILE_WIDTH, TILE_HEIGHT, CHUNK_SIZE } from '../constants';
 const ASSETS_SVG: Record<string, string> = {
   axe_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="40" width="10" height="60" rx="5" fill="#78350f"/><path d="M45 20 L75 10 L75 50 L45 40 Z" fill="#94a3b8"/><path d="M45 20 L25 10 L25 50 L45 40 Z" fill="#64748b"/></svg>`,
   pickaxe_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="40" width="10" height="60" rx="5" fill="#78350f"/><path d="M10 30 Q50 10 90 30 L90 45 Q50 25 10 45 Z" fill="#94a3b8"/></svg>`,
-  sword_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="70" width="10" height="30" rx="2" fill="#451a03"/><rect x="25" y="70" width="50" height="8" rx="2" fill="#d97706"/><path d="M40 10 L60 10 L65 70 L35 70 Z" fill="#cbd5e1"/><path d="M50 5 L60 10 L40 10 Z" fill="#94a3b8"/></svg>`,
+  hoe_tool: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="40" width="8" height="60" rx="4" fill="#78350f"/><rect x="20" y="35" width="40" height="12" rx="4" fill="#94a3b8"/></svg>`,
+  seed_item: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="60" r="15" fill="#8b5cf6"/><path d="M50 45 Q60 30 50 10 Q40 30 50 45" fill="#15803d"/></svg>`,
   tree_oak: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg"><rect x="45" y="80" width="10" height="30" fill="#451a03"/><circle cx="50" cy="50" r="40" fill="#15803d"/><circle cx="30" cy="60" r="25" fill="#166534"/><circle cx="70" cy="60" r="25" fill="#166534"/><circle cx="50" cy="30" r="25" fill="#14532d"/></svg>`,
   rock_standard: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M10 90 L30 30 L70 20 L90 80 Z" fill="#a1a1aa"/><path d="M30 30 L50 60 L70 20 Z" fill="#71717a"/><path d="M10 90 L30 30 L50 60 Z" fill="#d4d4d8"/></svg>`,
   bush_berry: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="#166534"/><circle cx="30" cy="40" r="8" fill="#1d4ed8"/><circle cx="70" cy="35" r="8" fill="#1d4ed8"/><circle cx="45" cy="70" r="8" fill="#1d4ed8"/></svg>`,
+  farm_empty: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="#451a03" stroke="#29160a" stroke-width="2"/><rect x="15" y="15" width="70" height="70" fill="#422006"/></svg>`,
+  farm_growing: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="#451a03"/><path d="M50 80 L50 40" stroke="#15803d" stroke-width="5"/><circle cx="50" cy="40" r="10" fill="#22c55e"/></svg>`,
+  farm_ripe: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="90" height="90" fill="#451a03"/><path d="M50 80 L50 30" stroke="#15803d" stroke-width="5"/><circle cx="50" cy="30" r="12" fill="#ef4444"/><circle cx="40" cy="45" r="8" fill="#ef4444"/><circle cx="60" cy="45" r="8" fill="#ef4444"/></svg>`,
   deer: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><ellipse cx="50" cy="60" rx="30" ry="20" fill="#92400e"/><circle cx="70" cy="40" r="15" fill="#92400e"/><rect x="65" y="10" width="4" height="20" fill="#451a03"/><rect x="35" y="75" width="6" height="15" fill="#451a03"/></svg>`,
   rabbit: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><ellipse cx="50" cy="70" rx="20" ry="15" fill="#e5e5e5"/><circle cx="65" cy="60" r="10" fill="#e5e5e5"/><rect x="62" y="35" width="4" height="25" rx="2" fill="#e5e5e5"/><rect x="68" y="35" width="4" height="25" rx="2" fill="#e5e5e5"/></svg>`,
   workbench: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="40" width="80" height="15" fill="#78350f"/><rect x="20" y="55" width="10" height="35" fill="#451a03"/><rect x="70" y="55" width="10" height="35" fill="#451a03"/></svg>`,
@@ -19,16 +23,18 @@ const ASSETS_SVG: Record<string, string> = {
   campfire: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="80" r="40" fill="rgba(0,0,0,0.1)"/><rect x="20" y="70" width="60" height="10" rx="5" fill="#451a03" transform="rotate(15 50 75)"/><rect x="20" y="70" width="60" height="10" rx="5" fill="#451a03" transform="rotate(-15 50 75)"/><circle cx="50" cy="45" r="25" fill="#ef4444"/><circle cx="50" cy="50" r="15" fill="#f59e0b"/></svg>`,
   arrow: `<svg viewBox="0 0 100 10" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="4" width="80" height="2" fill="#78350f"/><path d="M80 0 L100 5 L80 10 Z" fill="#cbd5e1"/></svg>`,
   flower: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="48" y="60" width="4" height="30" fill="#166534"/><circle cx="50" cy="50" r="15" fill="#f472b6"/><circle cx="50" cy="50" r="5" fill="#fcd34d"/></svg>`,
-  grass_clump: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M30 90 Q40 40 10 10" fill="none" stroke="#166534" stroke-width="5"/><path d="M50 90 Q50 30 50 0" fill="none" stroke="#15803d" stroke-width="5"/><path d="M70 90 Q60 40 90 10" fill="none" stroke="#166534" stroke-width="5"/></svg>`
+  grass_clump: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M30 90 Q40 40 10 10" fill="none" stroke="#166534" stroke-width="5"/><path d="M50 90 Q50 30 50 0" fill="none" stroke="#15803d" stroke-width="5"/><path d="M70 90 Q60 40 90 10" fill="none" stroke="#166534" stroke-width="5"/></svg>`,
+  villager: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg"><rect x="40" y="80" width="20" height="30" fill="#1c1917"/><rect x="30" y="40" width="40" height="40" rx="10" fill="#3b82f6"/><circle cx="50" cy="25" r="20" fill="#fde68a"/><circle cx="42" cy="22" r="3" fill="#000"/><circle cx="58" cy="22" r="3" fill="#000"/></svg>`,
+  shopkeeper: `<svg viewBox="0 0 100 120" xmlns="http://www.w3.org/2000/svg"><rect x="40" y="80" width="20" height="30" fill="#1c1917"/><rect x="30" y="40" width="40" height="40" rx="10" fill="#8b5cf6"/><circle cx="50" cy="25" r="20" fill="#fde68a"/><path d="M30 15 L70 15 L50 0 Z" fill="#451a03"/></svg>`,
+  house_village: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="40" width="80" height="50" fill="#a16207"/><path d="M0 45 L50 0 L100 45 Z" fill="#78350f"/><rect x="40" y="65" width="20" height="25" fill="#29160a"/><rect x="20" y="55" width="10" height="10" fill="#bae6fd"/><rect x="70" y="55" width="10" height="10" fill="#bae6fd"/></svg>`,
+  loot_bag: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M20 90 Q20 30 50 30 Q80 30 80 90 Z" fill="#78350f"/><rect x="35" y="25" width="30" height="10" rx="5" fill="#451a03"/><path d="M50 30 L50 20" stroke="#451a03" stroke-width="5"/></svg>`
 };
 
-const ENTITY_ASSET_MAP: Record<EntityType, string> = {
+const ENTITY_ASSET_MAP: Record<string, string> = {
   tree_oak: 'tree_oak', tree_pine: 'tree_oak', tree_palm: 'tree_oak', rock_standard: 'rock_standard', rock_iron: 'rock_standard',
   bush_berry: 'bush_berry', bush_flower: 'bush_berry', bush_dry: 'rock_standard', well: 'well', player: 'player', deer: 'deer', rabbit: 'rabbit',
-  campfire: 'campfire', tent: 'tent', hut: 'hut', workbench: 'workbench', chest: 'campfire', loot_bag: 'campfire', farm_plot: 'tree_oak',
-  scorpion: 'deer', bear: 'deer', crab: 'deer', bridge: 'workbench', road: 'rock_standard', stone_wall: 'rock_standard', watchtower: 'well',
-  castle_gate: 'well', flower: 'flower', iron_ore: 'rock_standard', axe_tool: 'axe_tool', pickaxe_tool: 'pickaxe_tool', sword_tool: 'sword_tool',
-  grass_clump: 'grass_clump'
+  campfire: 'campfire', tent: 'tent', hut: 'hut', workbench: 'workbench', chest: 'campfire', loot_bag: 'loot_bag', farm_plot: 'farm_empty',
+  flower: 'flower', grass_clump: 'grass_clump', villager: 'villager', shopkeeper: 'shopkeeper', house_village: 'house_village'
 };
 
 export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefObject<HTMLCanvasElement>, placingEntityType: EntityType | null }> = ({ gameState, canvasRef, placingEntityType }) => {
@@ -53,7 +59,6 @@ export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefOb
       const { zoom, cameraOffsetX, cameraOffsetY } = gameState.viewConfig;
       if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
       
-      // Clear with dark green to avoid black gaps
       ctx.fillStyle = '#064e3b';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -67,33 +72,14 @@ export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefOb
               const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE, ly = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
               drawTile(ctx, chunk[lx][ly], x, y, zoom);
           } else {
-              // Draw default grass if chunk is loading
               drawTile(ctx, 'grass', x, y, zoom);
           }
       }
 
-      if (gameState.clickMarker) {
-        ctx.save();
-        ctx.translate(gameState.clickMarker.x * TILE_WIDTH * zoom, gameState.clickMarker.y * TILE_HEIGHT * zoom);
-        ctx.beginPath();
-        const r = (1 - gameState.clickMarker.life) * 40 * zoom;
-        ctx.arc(0, 0, r, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 255, 255, ${gameState.clickMarker.life})`;
-        ctx.lineWidth = 2 * zoom;
-        ctx.stroke();
-        ctx.restore();
-      }
-
       const sorted = [...gameState.entities].sort((a, b) => a.y - b.y);
-      sorted.forEach(ent => { if (ent.y < gameState.playerPos.y) drawEntity(ctx, ent, zoom, gameState.hoveredEntityId === ent.id); });
+      sorted.forEach(ent => { drawEntity(ctx, ent, zoom, gameState.hoveredEntityId === ent.id); });
       drawPlayer(ctx, gameState, zoom);
-      sorted.forEach(ent => { if (ent.y >= gameState.playerPos.y) drawEntity(ctx, ent, zoom, gameState.hoveredEntityId === ent.id); });
 
-      gameState.projectiles.forEach(p => {
-          const img = images[p.type]; if (img) { ctx.save(); ctx.translate(p.x * TILE_WIDTH * zoom, p.y * TILE_HEIGHT * zoom); ctx.rotate(Math.atan2(p.vy, p.vx)); ctx.drawImage(img, -20*zoom, -2.5*zoom, 40*zoom, 5*zoom); ctx.restore(); }
-      });
-      gameState.particles.forEach(p => { ctx.fillStyle = p.color; ctx.globalAlpha = p.life / p.maxLife; ctx.beginPath(); ctx.arc(p.x * TILE_WIDTH * zoom, p.y * TILE_HEIGHT * zoom, p.size * zoom, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; });
-      gameState.floatingTexts.forEach(ft => { ctx.fillStyle = ft.color; ctx.globalAlpha = ft.life; ctx.font = `bold ${14 * zoom}px Inter`; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x * TILE_WIDTH * zoom, (ft.y - 0.5) * TILE_HEIGHT * zoom); ctx.globalAlpha = 1; });
       ctx.restore(); frame = requestAnimationFrame(render);
     }; render(); return () => cancelAnimationFrame(frame);
   }, [gameState, assetsLoaded, images]);
@@ -105,11 +91,16 @@ export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefOb
   };
 
   const drawEntity = (ctx: CanvasRenderingContext2D, ent: Entity, zoom: number, hovered: boolean) => {
-    const img = images[ENTITY_ASSET_MAP[ent.type as EntityType]]; if (!img) return;
+    let assetKey = ENTITY_ASSET_MAP[ent.type] || 'rock_standard';
+    if (ent.type === 'farm_plot') {
+      if (ent.growthStage === 1) assetKey = 'farm_empty';
+      else if (ent.growthStage === 2) assetKey = 'farm_growing';
+      else if (ent.growthStage === 3) assetKey = 'farm_ripe';
+    }
+    
+    const img = images[assetKey]; if (!img) return;
     const x = ent.x * TILE_WIDTH * zoom, y = ent.y * TILE_HEIGHT * zoom, size = TILE_WIDTH * 1.5 * zoom;
-    const isAnimal = ent.type === 'deer' || ent.type === 'rabbit';
-    const wobble = isAnimal && ent.aiState === 'grazing' ? Math.abs(Math.sin(performance.now() / 200)) * 5 * zoom : 0;
-    ctx.save(); ctx.translate(x + TILE_WIDTH*zoom/2, y + TILE_HEIGHT*zoom - wobble);
+    ctx.save(); ctx.translate(x + TILE_WIDTH*zoom/2, y + TILE_HEIGHT*zoom);
     if (hovered) { ctx.shadowBlur = 10 * zoom; ctx.shadowColor = 'white'; }
     if (ent.facing === 'right') ctx.scale(-1, 1);
     ctx.drawImage(img, -size / 2, -size, size, size); ctx.restore();
@@ -117,63 +108,17 @@ export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefOb
 
   const drawPlayer = (ctx: CanvasRenderingContext2D, engine: GameState, zoom: number) => {
     const px = engine.playerPos.x * TILE_WIDTH * zoom, py = engine.playerPos.y * TILE_HEIGHT * zoom, size = TILE_WIDTH * 1.2 * zoom;
-    const isWalking = engine.playerStats.isWalking, time = performance.now() / 150;
-    const bounce = isWalking ? Math.abs(Math.sin(time)) * 4 * zoom : 0;
-    const { character } = engine.playerStats;
-
+    const bounce = engine.playerStats.isWalking ? Math.abs(Math.sin(performance.now()/150)) * 4 * zoom : 0;
     ctx.save(); ctx.translate(px + TILE_WIDTH*zoom/2, py + TILE_HEIGHT*zoom);
-    // Legs
-    ctx.fillStyle = '#1c1917';
-    ctx.fillRect(-size*0.15, -size*0.2 + (isWalking ? Math.sin(time)*size*0.05 : 0), size*0.1, size*0.2);
-    ctx.fillRect(size*0.05, -size*0.2 + (isWalking ? Math.sin(time + Math.PI)*size*0.05 : 0), size*0.1, size*0.2);
-    // Body
-    ctx.fillStyle = character.outfitColor; ctx.beginPath(); ctx.roundRect(-size*0.25, -size*0.65 - bounce, size*0.5, size*0.5, size*0.1); ctx.fill();
-    // Head
+    ctx.fillStyle = engine.playerStats.character.outfitColor; ctx.beginPath(); ctx.roundRect(-size*0.25, -size*0.65 - bounce, size*0.5, size*0.5, size*0.1); ctx.fill();
     ctx.fillStyle = '#fde68a'; ctx.beginPath(); ctx.arc(0, -size*0.8 - bounce, size*0.18, 0, Math.PI * 2); ctx.fill();
-    // Eyes
-    ctx.fillStyle = '#000'; const eyeX = engine.playerStats.facing.includes('e') ? 2 : -2;
-    ctx.beginPath(); ctx.arc(eyeX * zoom, -size*0.82 - bounce, size*0.02, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc((eyeX + 6) * zoom, -size*0.82 - bounce, size*0.02, 0, Math.PI*2); ctx.fill();
-
-    // Arms & Tool
-    ctx.fillStyle = '#fde68a'; 
-    const swing = isWalking ? Math.sin(time) * 15 : 0;
     
-    // Left Arm (Standard swinging)
-    ctx.save(); ctx.translate(-size*0.3, -size*0.55 - bounce); ctx.rotate(-swing * Math.PI / 180); ctx.fillRect(-size*0.05, 0, size*0.1, size*0.25); ctx.restore();
-
-    // Right Arm (Pivot from Shoulder for Tool rotation - swinging OUTWARD)
-    ctx.save(); 
-    const shoulderX = size * 0.25;
-    const shoulderY = -size * 0.55 - bounce;
-    ctx.translate(shoulderX, shoulderY);
-    
-    // Animation swing outward curve
-    const interactionRotation = engine.playerStats.interactionAnim > 0 
-        ? Math.sin((1 - engine.playerStats.interactionAnim / 0.3) * Math.PI) * 1.5 
-        : (swing * Math.PI / 180);
-    
-    ctx.rotate(interactionRotation);
-    
-    // Draw the arm part starting from shoulder
-    ctx.fillRect(-size * 0.05, 0, size * 0.1, size * 0.25);
-    
-    // Hand is at the end of the arm
-    const handX = 0;
-    const handY = size * 0.25;
-
-    // Draw Equipped Tool
     const eqId = engine.playerStats.equippedItemId;
     if (eqId) {
-        let toolKey = eqId === 'axe' ? 'axe_tool' : eqId === 'pickaxe' ? 'pickaxe_tool' : eqId.includes('sword') ? 'sword_tool' : eqId === 'bow' ? 'bow' : '';
-        const tImg = images[toolKey];
-        if (tImg) {
-            const tSize = size * 0.65;
-            // Draw tool relative to hand, grip at bottom of handle
-            ctx.drawImage(tImg, handX - tSize * 0.5, handY - tSize * 0.85, tSize, tSize);
-        }
+      const toolKey = eqId === 'axe' ? 'axe_tool' : eqId === 'pickaxe' ? 'pickaxe_tool' : eqId === 'hoe' ? 'hoe_tool' : eqId === 'berry_seed' ? 'seed_item' : '';
+      const tImg = images[toolKey];
+      if (tImg) ctx.drawImage(tImg, size*0.2, -size*0.6, size*0.5, size*0.5);
     }
-    
-    ctx.restore(); ctx.restore();
+    ctx.restore();
   }; return <canvas ref={canvasRef} />;
 };

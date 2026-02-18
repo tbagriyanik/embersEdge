@@ -3,13 +3,17 @@ import { GameState, InputManagerCallbacks, EntityType, Entity } from './types';
 import { TILE_WIDTH, TILE_HEIGHT } from './constants';
 import React from 'react';
 
+export interface InputManagerCallbacksExtended extends InputManagerCallbacks {
+  onToggleShop: () => void;
+}
+
 export class InputManager {
   private keys: { [key: string]: boolean } = {};
   private mouseState = { x: 0, y: 0, leftDown: false, rightDown: false, middleDown: false };
   private playerTargetPos: { x: number; y: number } | null = null;
   private rightClickStartPos = { x: 0, y: 0 }; 
   private canvas: HTMLCanvasElement | null = null;
-  private callbacks: InputManagerCallbacks;
+  private callbacks: InputManagerCallbacksExtended;
   private gameState: React.MutableRefObject<GameState>;
 
   private readonly INTERACT_RANGE = 2.0;
@@ -22,6 +26,8 @@ export class InputManager {
     'tent',
     'farm_plot',
     'loot_bag',
+    'shopkeeper',
+    'villager'
   ];
 
   private gatherableEntityTypes: EntityType[] = [
@@ -37,7 +43,7 @@ export class InputManager {
     'rabbit'
   ];
 
-  constructor(callbacks: InputManagerCallbacks, gameState: React.MutableRefObject<GameState>) {
+  constructor(callbacks: InputManagerCallbacksExtended, gameState: React.MutableRefObject<GameState>) {
     this.callbacks = callbacks;
     this.gameState = gameState;
   }
@@ -87,7 +93,6 @@ export class InputManager {
   private handleKeyDown = (e: KeyboardEvent) => {
     const key = e.key.toLowerCase();
 
-    // Escape should always work to close modals or back out
     if (key === 'escape') {
       this.callbacks.onEscape();
       return;
@@ -101,8 +106,10 @@ export class InputManager {
     if (key === 'c') {
       this.callbacks.onToggleCrafting();
     }
+    if (key === 't') {
+      this.callbacks.onToggleShop();
+    }
 
-    // Ignore other interactions if game is effectively paused/paused by modal
     if (this.gameState.current.isPaused) return;
 
     if (key === 'e') {
@@ -177,7 +184,6 @@ export class InputManager {
     }
   };
 
-  // Fixed error: Changed MouseUpEvent to MouseEvent as it's the correct DOM type
   private handleMouseUp = (e: MouseEvent) => {
     if (e.button === 0) {
       this.mouseState.leftDown = false;

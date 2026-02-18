@@ -1,5 +1,5 @@
 
-export type ResourceType = 'wood' | 'stone' | 'berry' | 'water' | 'meat' | 'iron' | 'herb';
+export type ResourceType = 'wood' | 'stone' | 'berry' | 'water' | 'meat' | 'iron' | 'herb' | 'gold';
 export type WeatherType = 'clear' | 'rain' | 'fog' | 'snow';
 export type TileType = 'grass' | 'sand' | 'water' | 'snow_tile' | 'desert_tile' | 'stone';
 export type FacingDirection = 'se' | 'sw' | 'ne' | 'nw';
@@ -14,8 +14,9 @@ export interface WeatherState {
 
 export interface Item {
   id: string;
+  uniqueId: string;
   name: string;
-  type: 'resource' | 'tool' | 'food' | 'material' | 'structure' | 'weapon';
+  type: 'resource' | 'tool' | 'food' | 'material' | 'structure' | 'weapon' | 'currency';
   icon: string;
   description: string;
   stackable: boolean;
@@ -40,7 +41,7 @@ export interface Recipe {
   ingredients: { [key: string]: number };
   levelRequired: number;
   requiresWorkbench?: boolean;
-  category: 'tools' | 'buildings' | 'survival';
+  category: 'tools' | 'buildings' | 'survival' | 'trade';
 }
 
 export type EntityType = 
@@ -50,7 +51,8 @@ export type EntityType =
   | 'well' | 'player' | 'deer' | 'rabbit' | 'campfire' | 'tent' | 'workbench' | 'hut' | 'chest' | 'loot_bag' | 'farm_plot'
   | 'scorpion' | 'bear' | 'crab'
   | 'bridge' | 'road' | 'stone_wall' | 'watchtower' | 'castle_gate'
-  | 'flower' | 'iron_ore' | 'axe_tool' | 'pickaxe_tool' | 'sword_tool' | 'grass_clump';
+  | 'flower' | 'iron_ore' | 'axe_tool' | 'pickaxe_tool' | 'sword_tool' | 'grass_clump'
+  | 'villager' | 'shopkeeper' | 'house_village';
 
 export interface Entity {
   id: string;
@@ -64,7 +66,7 @@ export interface Entity {
   targetY?: number;
   isFleeing?: boolean;
   spawnTime?: number;
-  aiState?: 'idle' | 'grazing' | 'fleeing' | 'chasing' | 'attacking';
+  aiState?: 'idle' | 'grazing' | 'fleeing' | 'chasing' | 'attacking' | 'wandering';
   lastAiTick?: number;
   attackCooldown?: number;
   damage?: number;
@@ -72,6 +74,7 @@ export interface Entity {
   growthStage?: number;
   growthTimer?: number;
   facing?: 'left' | 'right';
+  dialogueIndex?: number;
 }
 
 export interface Projectile {
@@ -146,6 +149,7 @@ export interface GameState {
   playerPos: { x: number; y: number };
   playerStats: PlayerStats;
   inventory: Item[];
+  quickSlots: (string | null)[];
   entities: Entity[];
   projectiles: Projectile[];
   floatingTexts: FloatingText[];
@@ -154,6 +158,7 @@ export interface GameState {
   isDay: boolean;
   gameStarted: boolean;
   isPaused: boolean;
+  isResting: boolean;
   weather: WeatherState;
   settings: GameSettings;
   viewConfig: {
