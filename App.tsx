@@ -46,7 +46,8 @@ const App: React.FC = () => {
     settings: { language: 'en', soundEnabled: true },
     viewConfig: { zoom: 1, rotation: 0, cameraOffsetX: 0, cameraOffsetY: 0 },
     chunks: {},
-    hoveredEntityId: null
+    hoveredEntityId: null,
+    clickMarker: null
   });
 
   const velocity = useRef({ x: 0, y: 0 });
@@ -144,12 +145,13 @@ const App: React.FC = () => {
     const engine = gameState.current;
     const t = (key: string) => TRANSLATIONS[engine.settings.language][key] || key;
 
-    if (action === 'use') {
+    if (action === 'use' || action === 'equip') {
         if (data.type === 'food') {
             const stats = engine.playerStats;
             if (data.effect) {
                 stats.hunger = Math.min(100, stats.hunger + (data.effect.hunger || 0));
                 stats.health = Math.min(100, stats.health + (data.effect.health || 0));
+                stats.thirst = Math.min(100, stats.thirst + (data.effect.thirst || 0));
                 SoundManager.play('eat');
                 addFloatingText(engine.playerPos.x, engine.playerPos.y, `+${data.effect.hunger} Hunger`, '#fbbf24');
                 const idx = engine.inventory.findIndex(i => i === data);
@@ -159,7 +161,9 @@ const App: React.FC = () => {
                 }
             }
         } else if (data.type === 'tool' || data.type === 'weapon') {
-            engine.playerStats.equippedItemId = engine.playerStats.equippedItemId === data.id ? null : data.id;
+            // If action is 'equip', always set it. If 'use', toggle it.
+            if (action === 'equip') engine.playerStats.equippedItemId = data.id;
+            else engine.playerStats.equippedItemId = engine.playerStats.equippedItemId === data.id ? null : data.id;
             SoundManager.playUI('equip');
         } else if (data.type === 'structure' || data.placeEntity) {
             const facing = engine.playerStats.facing;
@@ -179,7 +183,7 @@ const App: React.FC = () => {
                 vx: (dx / dist) * speed, vy: (dy / dist) * speed, damage: 15, ownerId: 'player', life: 3, type: 'arrow'
             });
             SoundManager.playToolAction('bow');
-            engine.playerStats.interactionAnim = 0.2;
+            engine.playerStats.interactionAnim = 0.3;
         } else {
             showMessage(t('out_of_arrows'));
         }
@@ -191,6 +195,10 @@ const App: React.FC = () => {
     } else if (action === 'repair_all') {
         engine.inventory.forEach(item => { if (item.durability !== undefined && item.maxDurability !== undefined) item.durability = item.maxDurability; });
         SoundManager.play('build'); showMessage("All items repaired!");
+    } else if (action === 'reorder') {
+        const { fromIdx, toIdx } = data;
+        const [movedItem] = engine.inventory.splice(fromIdx, 1);
+        engine.inventory.splice(toIdx, 0, movedItem);
     }
     setUiState(prev => prev + 1);
   }, []);
@@ -223,7 +231,7 @@ const App: React.FC = () => {
         addFloatingText(engine.playerPos.x, engine.playerPos.y, `Refreshed!`, '#60a5fa');
         SoundManager.play('eat');
         setUiState(prev => prev + 1);
-      } else if (entity.type === 'tent') {
+      } else if (entity.type === 'tent' || entity.type === 'hut') {
         showMessage(t('rest_tent'));
         engine.playerStats.health = Math.min(100, engine.playerStats.health + 25);
         engine.playerStats.stamina = 100;
@@ -234,18 +242,26 @@ const App: React.FC = () => {
         const inventory = engine.inventory;
         const rawMeat = inventory.find(i => i.id === 'meat_raw');
         const berries = inventory.find(i => i.id === 'berry');
-        let cookedItem: Item | null = null, consumedItem: Item | null = null;
-        if (rawMeat) { consumedItem = rawMeat; cookedItem = { ...ITEMS.meat_cooked, quantity: 1 }; }
-        else if (berries) { consumedItem = berries; cookedItem = { ...ITEMS.berry_cooked, quantity: 1 }; }
+        let cookedItemProto: Item | null = null, consumedItem: Item | null = null;
+        if (rawMeat) { consumedItem = rawMeat; cookedItemProto = { ...ITEMS.meat_cooked }; }
+        else if (berries) { consumedItem = berries; cookedItemProto = { ...ITEMS.berry_cooked }; }
 
-        if (consumedItem && cookedItem) {
+        if (consumedItem && cookedItemProto) {
           consumedItem.quantity--;
           if (consumedItem.quantity <= 0) inventory.splice(inventory.indexOf(consumedItem), 1);
-          const existing = inventory.find(i => i.id === cookedItem!.id && i.quantity < (i.maxStack || 99));
-          if (existing) existing.quantity++;
-          else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push(cookedItem);
-          showMessage(t('crafted') + " " + t(cookedItem.id));
-          addFloatingText(entity.x, entity.y, t(cookedItem.id), '#fbbf24');
+          
+          const existing = inventory.find(i => i.id === cookedItemProto!.id && i.quantity < (i.maxStack || 99));
+          if (existing) {
+            existing.quantity++;
+          } else if (inventory.length < MAX_INVENTORY_SLOTS) {
+            inventory.push({ ...cookedItemProto, quantity: 1 });
+          } else {
+            showMessage(t('inv_full'));
+            return;
+          }
+          
+          showMessage(t('crafted') + " " + t(cookedItemProto.id));
+          addFloatingText(entity.x, entity.y, t(cookedItemProto.id), '#fbbf24');
           SoundManager.play('craft');
           spawnParticles(entity.x, entity.y, 'spark', 8, '#f59e0b', 1.2);
           engine.playerStats.xp += 10; checkLevelUp(engine.playerStats);
@@ -254,9 +270,20 @@ const App: React.FC = () => {
       }
     } else {
         const playerPos = engine.playerPos;
-        const neighbors = [{x:0, y:0}, {x:0.5, y:0}, {x:-0.5, y:0}, {x:0, y:0.5}, {x:0, y:-0.5}];
-        const isNearWater = neighbors.some(n => getTileAt(playerPos.x + n.x, playerPos.y + n.y) === 'water');
-        if (isNearWater && engine.playerStats.thirst < 95) {
+        // Improved Lakeside drinking range
+        const waterCheckRadius = 1.8;
+        let nearWater = false;
+        for (let ox = -waterCheckRadius; ox <= waterCheckRadius; ox += 0.4) {
+            for (let oy = -waterCheckRadius; oy <= waterCheckRadius; oy += 0.4) {
+                if (getTileAt(playerPos.x + ox, playerPos.y + oy) === 'water') {
+                    nearWater = true;
+                    break;
+                }
+            }
+            if (nearWater) break;
+        }
+
+        if (nearWater && engine.playerStats.thirst < 98) {
           showMessage(t(`drink_water`));
           engine.playerStats.thirst = Math.min(100, engine.playerStats.thirst + 20);
           addFloatingText(playerPos.x, playerPos.y, `+20 Thirst`, '#60a5fa');
@@ -277,7 +304,7 @@ const App: React.FC = () => {
     const inventory = engine.inventory;
     const equippedTool = inventory.find(item => item.id === playerStats.equippedItemId);
     const equippedToolType = equippedTool ? ITEMS[equippedTool.id]?.type : 'none';
-    const preferredTools = GATHER_TOOL_REQUIREMENTS[targetEntity.type] || [];
+    const preferredTools = GATHER_TOOL_REQUIREMENTS[targetEntity.type as keyof typeof GATHER_TOOL_REQUIREMENTS] || [];
     let damage = GATHER_HAND_DAMAGE;
     if (equippedToolType === 'tool' || equippedToolType === 'weapon') {
         damage = GATHER_BASE_DAMAGE;
@@ -285,11 +312,13 @@ const App: React.FC = () => {
     }
     targetEntity.health -= damage;
     SoundManager.playGather(targetEntity.type, playerStats.equippedItemId);
+    
     const gatherInfo = GATHER_ITEM_QUANTITY[targetEntity.type as keyof typeof GATHER_ITEM_QUANTITY];
     if (gatherInfo) {
       spawnParticles(targetEntity.x, targetEntity.y + 0.5, gatherInfo.particle as Particle['type'], 3, targetEntity.type.includes('tree') ? '#a16207' : '#fbbf24', 0.6);
       addFloatingText(targetEntity.x, targetEntity.y, `+${gatherInfo.quantity} ${t(gatherInfo.item)}`, '#fbbf24');
     }
+    
     if (targetEntity.health > 0 && gatherInfo) {
         const itemToAdd = { ...ITEMS[gatherInfo.item], quantity: gatherInfo.quantity };
         const existingItem = inventory.find(i => i.id === itemToAdd.id && i.stackable && (i.quantity < (i.maxStack || 99)));
@@ -297,10 +326,21 @@ const App: React.FC = () => {
         else if (inventory.length < MAX_INVENTORY_SLOTS) inventory.push(itemToAdd);
         else showMessage(t('inv_full'));
     }
+    
     playerStats.xp += GATHER_XP_PER_HIT; checkLevelUp(playerStats);
     if (equippedTool && equippedTool.durability !== undefined) {
       equippedTool.durability = Math.max(0, equippedTool.durability - 10);
-      if (equippedTool.durability <= 0) { showMessage(t('tool_broken')); playerStats.equippedItemId = null; }
+      if (equippedTool.durability <= 0) { 
+        showMessage(t('tool_broken')); 
+        playerStats.equippedItemId = null; 
+        
+        // AUTO-EQUIP: Look for replacement tool of same ID
+        const replacement = inventory.find(i => i.id === equippedTool.id && i.durability && i.durability > 0);
+        if (replacement) {
+           playerStats.equippedItemId = replacement.id;
+           SoundManager.playUI('equip');
+        }
+      }
     }
     if (targetEntity.health <= 0) {
       engine.entities.splice(entityIndex, 1);
@@ -332,9 +372,17 @@ const App: React.FC = () => {
         onClickToMove: (worldX, worldY) => {
           if (gameState.current.playerStats.equippedItemId === 'bow') { handleAction('fire', { tx: worldX, ty: worldY }); return; }
           inputManagerRef.current?.setPlayerTargetPos({ x: worldX, y: worldY });
+          gameState.current.clickMarker = { x: worldX, y: worldY, life: 1.0 };
         },
         onQuickSlotActivated: handleQuickSlotActivated,
-        onEscape: () => { if (activeModal !== 'none') setActiveModal('none'); else setGameStarted(false); }
+        onEscape: () => { 
+          // Intelligent Escape Handling
+          if (activeModal !== 'none') {
+            setActiveModal('none');
+          } else {
+            setGameStarted(false);
+          }
+        }
       }, gameState);
     }
     inputManagerRef.current.init(canvasRef.current);
@@ -348,6 +396,10 @@ const App: React.FC = () => {
       cancelAnimationFrame(animationFrameId.current); clearInterval(autoSaveInterval);
     };
   }, [handleQuickSlotActivated, handleInteract, handleGather, saveGame, activeModal, getTileAt, gameStarted]);
+
+  useEffect(() => {
+    gameState.current.isPaused = activeModal !== 'none' || isDead;
+  }, [activeModal, isDead]);
 
   const gameLoop = (timestamp: number) => {
     const dt = Math.min((timestamp - lastTime.current) / 1000, 0.1);
@@ -364,10 +416,15 @@ const App: React.FC = () => {
     engine.time += dt * 5; if (engine.time >= 2400) engine.time = 0;
     engine.isDay = engine.time > 600 && engine.time < 1800;
     if (engine.playerStats.interactionAnim > 0) engine.playerStats.interactionAnim = Math.max(0, engine.playerStats.interactionAnim - dt);
+    
+    if (engine.clickMarker) {
+      engine.clickMarker.life -= dt * 2.5;
+      if (engine.clickMarker.life <= 0) engine.clickMarker = null;
+    }
+
     const workbenchInRange = engine.entities.some(e => e.type === 'workbench' && Math.sqrt((e.x - engine.playerPos.x)**2 + (e.y - engine.playerPos.y)**2) < 3);
     if (workbenchInRange !== isNearWorkbench) setIsNearWorkbench(workbenchInRange);
 
-    // AI & Environmental logic
     for (const ent of engine.entities) {
       if ((ent.type === 'deer' || ent.type === 'rabbit')) {
         if (!ent.aiState) ent.aiState = 'idle';
@@ -378,7 +435,18 @@ const App: React.FC = () => {
         } else if (ent.aiState === 'grazing') {
             const dx = ent.targetX! - ent.x, dy = ent.targetY! - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
             if (dist < 0.2) { ent.aiState = 'idle'; ent.lastAiTick = now; }
-            else { const speed = ent.type === 'rabbit' ? 3 : 2; ent.x += (dx/dist)*speed*dt; ent.y += (dy/dist)*speed*dt; }
+            else { 
+                const speed = ent.type === 'rabbit' ? 3 : 2;
+                const nextX = ent.x + (dx/dist)*speed*dt;
+                const nextY = ent.y + (dy/dist)*speed*dt;
+                if (getTileAt(nextX, nextY) !== 'water') {
+                    ent.x = nextX;
+                    ent.y = nextY;
+                } else {
+                    ent.aiState = 'idle';
+                    ent.lastAiTick = now;
+                }
+            }
         }
       }
       if (ent.type === 'campfire' && Math.random() < 8 * dt) spawnParticles(ent.x, ent.y - 0.3, 'smoke', 1, 'rgba(150, 150, 150, 0.4)', 1.5);
@@ -406,6 +474,15 @@ const App: React.FC = () => {
     
     for (let i = engine.projectiles.length - 1; i >= 0; i--) {
         const p = engine.projectiles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+        
+        const hitEntity = engine.entities.find(e => Math.sqrt((e.x-p.x)**2 + (e.y-p.y)**2) < 0.6);
+        if (hitEntity && hitEntity.id !== p.ownerId) {
+          hitEntity.health -= p.damage;
+          spawnParticles(p.x, p.y, 'hit_spark', 5, '#ffffff', 0.8);
+          engine.projectiles.splice(i, 1);
+          continue;
+        }
+
         if (p.life <= 0) engine.projectiles.splice(i, 1);
     }
     for (let i = engine.particles.length - 1; i >= 0; i--) {
@@ -431,9 +508,13 @@ const App: React.FC = () => {
               const wx = cx * CHUNK_SIZE + x, wy = cy * CHUNK_SIZE + y;
               chunk[x][y] = calculateTileType(wx, wy);
               if (chunk[x][y] === 'grass') {
-                if (Math.random() < 0.04) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'tree_oak', health: 100, maxHealth: 100 });
-                else if (Math.random() < 0.005) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'deer', health: 60, maxHealth: 60, aiState: 'idle' });
-                else if (Math.random() < 0.01) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'rabbit', health: 20, maxHealth: 20, aiState: 'idle' });
+                const r = Math.random();
+                if (r < 0.04) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'tree_oak', health: 100, maxHealth: 100 });
+                else if (r < 0.05) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'flower', health: 10, maxHealth: 10 });
+                else if (r < 0.07) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'grass_clump', health: 10, maxHealth: 10 });
+                else if (r < 0.075) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'rock_standard', health: 80, maxHealth: 80 });
+                else if (r < 0.077) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'deer', health: 60, maxHealth: 60, aiState: 'idle' });
+                else if (r < 0.08) gameState.current.entities.push({ id: Math.random().toString(), x: wx + 0.5, y: wy + 0.5, type: 'rabbit', health: 20, maxHealth: 20, aiState: 'idle' });
               }
           }
       }
@@ -458,27 +539,28 @@ const App: React.FC = () => {
                 <HUD stats={gameState.current.playerStats} time={gameState.current.time} message={message} gameState={gameState.current} onAction={handleAction} usableItemsForQuickSlots={getUsableItemsForQuickSlots(gameState.current.inventory)} onZoom={(d) => inputManagerRef.current?.handleWheel({ deltaY: d } as WheelEvent)} onRotate={() => {}} onOpenSettings={() => setActiveModal('settings')} />
                 <div className="absolute top-4 right-4 z-50 flex gap-4">
                     <Minimap gameState={gameState.current} />
-                    <button onClick={() => setActiveModal('inventory')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl">🎒</button>
-                    <button onClick={() => setActiveModal('crafting')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl">⚒️</button>
+                    <button onClick={() => setActiveModal('inventory')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto">🎒</button>
+                    <button onClick={() => setActiveModal('crafting')} className="w-12 h-12 bg-black/40 rounded-full border border-white/20 flex items-center justify-center text-2xl pointer-events-auto">⚒️</button>
                 </div>
                 {activeModal === 'inventory' && <Inventory items={gameState.current.inventory} equippedItemId={gameState.current.playerStats.equippedItemId} isNearWorkbench={isNearWorkbench} onAction={handleAction} onClose={() => setActiveModal('none')} onSwitchToCrafting={() => setActiveModal('crafting')} language={gameState.current.settings.language} />}
                 {activeModal === 'crafting' && <Crafting inventory={gameState.current.inventory} playerLevel={gameState.current.playerStats.level} isNearWorkbench={isNearWorkbench} onCraft={(recipeId) => {
                     const recipe = RECIPES.find(r => r.id === recipeId);
                     if (recipe) {
+                        const engine = gameState.current;
                         recipe.ingredients && Object.entries(recipe.ingredients).forEach(([id, qty]) => {
-                            const item = gameState.current.inventory.find(i => i.id === id);
+                            const item = engine.inventory.find(i => i.id === id);
                             if (item) item.quantity -= (qty as number);
                         });
                         if (recipe.output.type === 'structure') {
-                            const facing = gameState.current.playerStats.facing;
+                            const facing = engine.playerStats.facing;
                             let ox = 0, oy = 0;
                             if (facing === 'nw') { ox = -1.2; oy = -1.2; } else if (facing === 'ne') { ox = 1.2; oy = -1.2; } else if (facing === 'sw') { ox = -1.2; oy = 1.2; } else { ox = 1.2; oy = 1.2; }
-                            handleAction('place', { x: gameState.current.playerPos.x + ox, y: gameState.current.playerPos.y + oy, type: recipe.output.placeEntity! });
+                            handleAction('place', { x: engine.playerPos.x + ox, y: engine.playerPos.y + oy, type: recipe.output.placeEntity! });
                         } else {
-                            const existing = gameState.current.inventory.find(i => i.id === recipe.output.id && i.quantity < (i.maxStack || 99));
-                            if (existing) existing.quantity += recipe.output.quantity; else gameState.current.inventory.push({ ...recipe.output });
+                            const existing = engine.inventory.find(i => i.id === recipe.output.id && i.quantity < (i.maxStack || 99));
+                            if (existing) existing.quantity += recipe.output.quantity; else engine.inventory.push({ ...recipe.output });
                         }
-                        SoundManager.play('craft'); gameState.current.playerStats.xp += 20; checkLevelUp(gameState.current.playerStats);
+                        SoundManager.play('craft'); engine.playerStats.xp += 20; checkLevelUp(engine.playerStats);
                     }
                 }} onClose={() => setActiveModal('none')} onSwitchToInventory={() => setActiveModal('inventory')} language={gameState.current.settings.language} />}
                 {isDead && <DeathScreen stats={gameState.current.playerStats} language={gameState.current.settings.language} onRetry={startNewGame} />}

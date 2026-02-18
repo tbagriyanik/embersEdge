@@ -15,16 +15,20 @@ const ASSETS_SVG: Record<string, string> = {
   workbench: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="40" width="80" height="15" fill="#78350f"/><rect x="20" y="55" width="10" height="35" fill="#451a03"/><rect x="70" y="55" width="10" height="35" fill="#451a03"/></svg>`,
   well: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="60" width="60" height="30" rx="5" fill="#57534e"/><circle cx="50" cy="70" r="20" fill="#1d4ed8"/></svg>`,
   tent: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50 10 L10 90 L90 90 Z" fill="#d97706"/><path d="M50 10 L40 90 L60 90 Z" fill="#451a03"/></svg>`,
+  hut: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="40" width="80" height="50" fill="#78350f"/><path d="M0 45 L50 0 L100 45 Z" fill="#451a03"/><rect x="40" y="60" width="20" height="30" fill="#29160a"/></svg>`,
   campfire: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="80" r="40" fill="rgba(0,0,0,0.1)"/><rect x="20" y="70" width="60" height="10" rx="5" fill="#451a03" transform="rotate(15 50 75)"/><rect x="20" y="70" width="60" height="10" rx="5" fill="#451a03" transform="rotate(-15 50 75)"/><circle cx="50" cy="45" r="25" fill="#ef4444"/><circle cx="50" cy="50" r="15" fill="#f59e0b"/></svg>`,
-  arrow: `<svg viewBox="0 0 100 10" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="4" width="80" height="2" fill="#78350f"/><path d="M80 0 L100 5 L80 10 Z" fill="#cbd5e1"/></svg>`
+  arrow: `<svg viewBox="0 0 100 10" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="4" width="80" height="2" fill="#78350f"/><path d="M80 0 L100 5 L80 10 Z" fill="#cbd5e1"/></svg>`,
+  flower: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="48" y="60" width="4" height="30" fill="#166534"/><circle cx="50" cy="50" r="15" fill="#f472b6"/><circle cx="50" cy="50" r="5" fill="#fcd34d"/></svg>`,
+  grass_clump: `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M30 90 Q40 40 10 10" fill="none" stroke="#166534" stroke-width="5"/><path d="M50 90 Q50 30 50 0" fill="none" stroke="#15803d" stroke-width="5"/><path d="M70 90 Q60 40 90 10" fill="none" stroke="#166534" stroke-width="5"/></svg>`
 };
 
 const ENTITY_ASSET_MAP: Record<EntityType, string> = {
   tree_oak: 'tree_oak', tree_pine: 'tree_oak', tree_palm: 'tree_oak', rock_standard: 'rock_standard', rock_iron: 'rock_standard',
   bush_berry: 'bush_berry', bush_flower: 'bush_berry', bush_dry: 'rock_standard', well: 'well', player: 'player', deer: 'deer', rabbit: 'rabbit',
-  campfire: 'campfire', tent: 'tent', workbench: 'workbench', hut: 'tent', chest: 'campfire', loot_bag: 'campfire', farm_plot: 'tree_oak',
+  campfire: 'campfire', tent: 'tent', hut: 'hut', workbench: 'workbench', chest: 'campfire', loot_bag: 'campfire', farm_plot: 'tree_oak',
   scorpion: 'deer', bear: 'deer', crab: 'deer', bridge: 'workbench', road: 'rock_standard', stone_wall: 'rock_standard', watchtower: 'well',
-  castle_gate: 'well', flower: 'bush_berry', iron_ore: 'rock_standard', axe_tool: 'axe_tool', pickaxe_tool: 'pickaxe_tool', sword_tool: 'sword_tool'
+  castle_gate: 'well', flower: 'flower', iron_ore: 'rock_standard', axe_tool: 'axe_tool', pickaxe_tool: 'pickaxe_tool', sword_tool: 'sword_tool',
+  grass_clump: 'grass_clump'
 };
 
 export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefObject<HTMLCanvasElement>, placingEntityType: EntityType | null }> = ({ gameState, canvasRef, placingEntityType }) => {
@@ -48,7 +52,11 @@ export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefOb
       if (!canvas || !ctx) return;
       const { zoom, cameraOffsetX, cameraOffsetY } = gameState.viewConfig;
       if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Clear with dark green to avoid black gaps
+      ctx.fillStyle = '#064e3b';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
       ctx.save(); ctx.translate(canvas.width / 2 - gameState.playerPos.x * TILE_WIDTH * zoom + cameraOffsetX, canvas.height / 2 - gameState.playerPos.y * TILE_HEIGHT * zoom + cameraOffsetY);
 
       const sX = Math.floor(gameState.playerPos.x - 20), eX = sX + 40, sY = Math.floor(gameState.playerPos.y - 20), eY = sY + 40;
@@ -58,7 +66,22 @@ export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefOb
           if (chunk) {
               const lx = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE, ly = ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
               drawTile(ctx, chunk[lx][ly], x, y, zoom);
+          } else {
+              // Draw default grass if chunk is loading
+              drawTile(ctx, 'grass', x, y, zoom);
           }
+      }
+
+      if (gameState.clickMarker) {
+        ctx.save();
+        ctx.translate(gameState.clickMarker.x * TILE_WIDTH * zoom, gameState.clickMarker.y * TILE_HEIGHT * zoom);
+        ctx.beginPath();
+        const r = (1 - gameState.clickMarker.life) * 40 * zoom;
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${gameState.clickMarker.life})`;
+        ctx.lineWidth = 2 * zoom;
+        ctx.stroke();
+        ctx.restore();
       }
 
       const sorted = [...gameState.entities].sort((a, b) => a.y - b.y);
@@ -82,7 +105,7 @@ export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefOb
   };
 
   const drawEntity = (ctx: CanvasRenderingContext2D, ent: Entity, zoom: number, hovered: boolean) => {
-    const img = images[ENTITY_ASSET_MAP[ent.type]]; if (!img) return;
+    const img = images[ENTITY_ASSET_MAP[ent.type as EntityType]]; if (!img) return;
     const x = ent.x * TILE_WIDTH * zoom, y = ent.y * TILE_HEIGHT * zoom, size = TILE_WIDTH * 1.5 * zoom;
     const isAnimal = ent.type === 'deer' || ent.type === 'rabbit';
     const wobble = isAnimal && ent.aiState === 'grazing' ? Math.abs(Math.sin(performance.now() / 200)) * 5 * zoom : 0;
@@ -111,21 +134,46 @@ export const GameCanvas: React.FC<{ gameState: GameState, canvasRef: React.RefOb
     ctx.fillStyle = '#000'; const eyeX = engine.playerStats.facing.includes('e') ? 2 : -2;
     ctx.beginPath(); ctx.arc(eyeX * zoom, -size*0.82 - bounce, size*0.02, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc((eyeX + 6) * zoom, -size*0.82 - bounce, size*0.02, 0, Math.PI*2); ctx.fill();
+
     // Arms & Tool
-    ctx.fillStyle = '#fde68a'; const swing = isWalking ? Math.sin(time) * 15 : 0;
+    ctx.fillStyle = '#fde68a'; 
+    const swing = isWalking ? Math.sin(time) * 15 : 0;
+    
+    // Left Arm (Standard swinging)
     ctx.save(); ctx.translate(-size*0.3, -size*0.55 - bounce); ctx.rotate(-swing * Math.PI / 180); ctx.fillRect(-size*0.05, 0, size*0.1, size*0.25); ctx.restore();
-    ctx.save(); ctx.translate(size*0.3, -size*0.55 - bounce); ctx.rotate(swing * Math.PI / 180);
-    const interaction = engine.playerStats.interactionAnim > 0 ? (1 - engine.playerStats.interactionAnim/0.3) * Math.PI : 0;
-    ctx.rotate(-interaction); ctx.fillRect(-size*0.05, 0, size*0.1, size*0.25);
+
+    // Right Arm (Pivot from Shoulder for Tool rotation - swinging OUTWARD)
+    ctx.save(); 
+    const shoulderX = size * 0.25;
+    const shoulderY = -size * 0.55 - bounce;
+    ctx.translate(shoulderX, shoulderY);
+    
+    // Animation swing outward curve
+    const interactionRotation = engine.playerStats.interactionAnim > 0 
+        ? Math.sin((1 - engine.playerStats.interactionAnim / 0.3) * Math.PI) * 1.5 
+        : (swing * Math.PI / 180);
+    
+    ctx.rotate(interactionRotation);
+    
+    // Draw the arm part starting from shoulder
+    ctx.fillRect(-size * 0.05, 0, size * 0.1, size * 0.25);
+    
+    // Hand is at the end of the arm
+    const handX = 0;
+    const handY = size * 0.25;
+
+    // Draw Equipped Tool
     const eqId = engine.playerStats.equippedItemId;
     if (eqId) {
         let toolKey = eqId === 'axe' ? 'axe_tool' : eqId === 'pickaxe' ? 'pickaxe_tool' : eqId.includes('sword') ? 'sword_tool' : eqId === 'bow' ? 'bow' : '';
         const tImg = images[toolKey];
         if (tImg) {
-            // Adjust draw to hold by bottom of handle
-            ctx.drawImage(tImg, -size*0.1, size*0.1, size*0.5, size*0.5);
+            const tSize = size * 0.65;
+            // Draw tool relative to hand, grip at bottom of handle
+            ctx.drawImage(tImg, handX - tSize * 0.5, handY - tSize * 0.85, tSize, tSize);
         }
     }
+    
     ctx.restore(); ctx.restore();
   }; return <canvas ref={canvasRef} />;
 };

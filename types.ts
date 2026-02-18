@@ -1,5 +1,5 @@
 
-export type ResourceType = 'wood' | 'stone' | 'berry' | 'water' | 'meat' | 'iron';
+export type ResourceType = 'wood' | 'stone' | 'berry' | 'water' | 'meat' | 'iron' | 'herb';
 export type WeatherType = 'clear' | 'rain' | 'fog' | 'snow';
 export type TileType = 'grass' | 'sand' | 'water' | 'snow_tile' | 'desert_tile' | 'stone';
 export type FacingDirection = 'se' | 'sw' | 'ne' | 'nw';
@@ -40,6 +40,7 @@ export interface Recipe {
   ingredients: { [key: string]: number };
   levelRequired: number;
   requiresWorkbench?: boolean;
+  category: 'tools' | 'buildings' | 'survival';
 }
 
 export type EntityType = 
@@ -49,7 +50,7 @@ export type EntityType =
   | 'well' | 'player' | 'deer' | 'rabbit' | 'campfire' | 'tent' | 'workbench' | 'hut' | 'chest' | 'loot_bag' | 'farm_plot'
   | 'scorpion' | 'bear' | 'crab'
   | 'bridge' | 'road' | 'stone_wall' | 'watchtower' | 'castle_gate'
-  | 'flower' | 'iron_ore' | 'axe_tool' | 'pickaxe_tool' | 'sword_tool';
+  | 'flower' | 'iron_ore' | 'axe_tool' | 'pickaxe_tool' | 'sword_tool' | 'grass_clump';
 
 export interface Entity {
   id: string;
@@ -105,7 +106,7 @@ export interface Particle {
   maxLife: number;
   size: number;
   color: string;
-  type: 'dust' | 'blood' | 'spark' | 'leaf' | 'rain_splash' | 'wood' | 'stone' | 'dirt' | 'ripple' | 'smoke';
+  type: 'dust' | 'blood' | 'spark' | 'leaf' | 'rain_splash' | 'wood' | 'stone' | 'dirt' | 'ripple' | 'smoke' | 'hit_spark';
   rotation?: number;
   rotSpeed?: number;
 }
@@ -163,6 +164,7 @@ export interface GameState {
   };
   chunks: Record<string, TileType[][]>;
   hoveredEntityId: string | null;
+  clickMarker: { x: number, y: number, life: number } | null;
 }
 
 export interface InputManagerCallbacks {

@@ -33,6 +33,7 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
     if (equipRef.current) {
       const rect = equipRef.current.getBoundingClientRect();
       const dragItem = items[draggedIndex];
+      // Allow equipping weapons and tools via drag drop
       const canEquip = dragItem.type === 'tool' || dragItem.type === 'weapon';
       setIsOverEquip(canEquip && e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom);
     }
@@ -104,8 +105,8 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
 
   const equipment = items.filter(i => i.type === 'tool' || i.type === 'weapon');
   const consumables = items.filter(i => i.type === 'food');
-  const structures = items.filter(i => i.type === 'structure');
-  const materials = items.filter(i => i.type === 'resource' || i.type === 'material');
+  // Structures are merged into materials/resources for simplicity per user request
+  const otherItems = items.filter(i => i.type === 'resource' || i.type === 'material' || i.type === 'structure');
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md select-none" 
@@ -145,7 +146,7 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
           <div className="md:w-1/3 flex flex-row md:flex-col gap-6 items-center md:items-stretch">
             <div 
               ref={equipRef} 
-              className={`w-32 h-32 md:w-full md:aspect-square relative rounded-full border-4 flex items-center justify-center text-6xl md:text-8xl transition-all shadow-2xl ${isOverEquip ? 'bg-amber-400/20 border-amber-400 scale-105' : 'bg-black/30 border-white/10'}`}
+              className={`w-32 h-32 md:w-full md:aspect-square relative rounded-full border-4 flex items-center justify-center text-6xl md:text-8xl transition-all shadow-2xl ${isOverEquip ? 'bg-amber-400/20 border-amber-400 scale-105 shadow-[0_0_40px_rgba(245,158,11,0.4)]' : 'bg-black/30 border-white/10'}`}
             >
                {items.find(i => i.id === equippedItemId)?.icon || <span className="opacity-10">⚔️</span>}
                <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none rounded-full" />
@@ -170,8 +171,7 @@ export const Inventory: React.FC<Props> = ({ items, equippedItemId, isNearWorkbe
           <div className="flex-1 overflow-y-auto pr-3 custom-scrollbar">
              <InventoryGrid itemsToDraw={equipment} title="Equipment" icon="⚔️" />
              <InventoryGrid itemsToDraw={consumables} title="Consumables" icon="🫐" />
-             <InventoryGrid itemsToDraw={structures} title="Structures" icon="🏗️" />
-             <InventoryGrid itemsToDraw={materials} title="Materials" icon="🪵" />
+             <InventoryGrid itemsToDraw={otherItems} title="Materials & Build" icon="🪵" />
           </div>
         </div>
       </div>
