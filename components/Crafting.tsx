@@ -31,8 +31,9 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
           const item = inventory.find(i => i.id === id);
           return item && item.quantity >= (qty as number);
       });
-      const hasWorkbenchLevel = recipe.workbenchLevelRequired === undefined || workbenchLevel >= recipe.workbenchLevelRequired;
-      return hasIngredients && hasWorkbenchLevel;
+      const needsWorkbench = recipe.workbenchLevelRequired !== undefined;
+      const hasWorkbenchLevel = !needsWorkbench || (isNearWorkbench && workbenchLevel >= (recipe.workbenchLevelRequired || 0));
+      return hasIngredients && hasWorkbenchLevel && playerLevel >= recipe.levelRequired;
   };
 
   const calculateMaxMultiple = (recipe: Recipe) => {
@@ -51,11 +52,17 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
   const renderRecipeCard = (recipe: Recipe) => {
     const canCraft = checkIngredients(recipe);
     const isSelling = recipe.id.startsWith('sell');
-    const needsWorkbenchUpgrade = recipe.workbenchLevelRequired !== undefined && workbenchLevel < recipe.workbenchLevelRequired;
+    const needsWorkbench = recipe.workbenchLevelRequired !== undefined;
+    const workbenchRequirementMet = isNearWorkbench && workbenchLevel >= (recipe.workbenchLevelRequired || 0);
+    const needsHigherWorkbench = needsWorkbench && (!isNearWorkbench || (isNearWorkbench && workbenchLevel < (recipe.workbenchLevelRequired || 0)));
     const maxMultiple = calculateMaxMultiple(recipe);
+    const hasIngredients = Object.entries(recipe.ingredients).every(([id, qty]) => {
+        const item = inventory.find(i => i.id === id);
+        return item && item.quantity >= (qty as number);
+    });
 
     return (
-      <div key={recipe.id} className={`p-4 rounded-2xl border-2 flex flex-col justify-between transition-all ${canCraft ? 'bg-white/10 border-white/20 hover:bg-white/15' : 'bg-black/40 border-white/5 opacity-60'}`}>
+      <div key={recipe.id} className={`p-4 rounded-2xl border-2 flex flex-col justify-between transition-all ${canCraft ? 'bg-white/10 border-white/20 hover:bg-white/15' : 'bg-black/40 border-white/5 opacity-70'}`}>
         <div className="flex gap-4 mb-3">
           <div className="w-12 h-12 bg-black/40 rounded-xl flex items-center justify-center text-2xl shadow-inner relative">
             {recipe.output.icon}
@@ -64,14 +71,31 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
           <div className="flex-1 overflow-hidden">
             <h3 className="text-[13px] font-black text-white uppercase truncate tracking-tight">{recipe.name}</h3>
             <p className="text-[11px] text-white/40 leading-tight mt-0.5 line-clamp-1 italic">{recipe.output.description}</p>
-            {needsWorkbenchUpgrade && <p className="text-[9px] text-red-400 font-bold uppercase mt-1">{t('needs_upgrade')} (Lvl {recipe.workbenchLevelRequired})</p>}
+            {needsHigherWorkbench ? (
+               <div className="flex items-center gap-1.5 mt-1.5">
+                  <span className="text-[9px] text-red-400 font-black uppercase tracking-tighter px-2 py-0.5 bg-red-400/10 rounded-full border border-red-400/20">
+                    ⚠️ {t('workbench_level')} {recipe.workbenchLevelRequired}
+                  </span>
+               </div>
+            ) : needsWorkbench && (
+               <div className="flex items-center gap-1.5 mt-1.5">
+                  <span className="text-[9px] text-emerald-400 font-black uppercase tracking-tighter px-2 py-0.5 bg-emerald-400/10 rounded-full border border-emerald-400/20">
+                    ⚒️ {t('requires_workbench')}
+                  </span>
+               </div>
+            )}
+            {playerLevel < recipe.levelRequired && (
+                <div className="flex items-center gap-1.5 mt-1">
+                   <span className="text-[9px] text-amber-500 font-black uppercase tracking-tighter">🔒 LV {recipe.levelRequired}</span>
+                </div>
+            )}
           </div>
         </div>
         <div className="bg-black/30 p-2.5 rounded-xl border border-white/5 mb-3 flex flex-wrap gap-x-3 gap-y-1">
           {Object.entries(recipe.ingredients).map(([id, qty]) => {
             const has = inventory.find(i => i.id === id)?.quantity || 0;
             return (
-              <div key={id} className="flex gap-1.5 items-center text-[11px] font-black uppercase tracking-tight">
+              <div key={id} className="flex gap-1.5 items-center text-[10px] font-black uppercase tracking-tight">
                 <span className="text-white/30">{t(id)}</span>
                 <span className={has >= (qty as number) ? 'text-emerald-400' : 'text-red-500'}>
                   {id === 'gold_coin' ? formatAbbreviatedNumber(has) : has}/{id === 'gold_coin' ? formatAbbreviatedNumber(qty as number) : qty}
@@ -107,6 +131,11 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
                 {shopMode ? t('trade_with_villagers') : isNearWorkbench ? `${t('at_workbench')} (Lvl ${workbenchLevel})` : t('basic_crafting')}
               </span>
               <div className="h-4 w-px bg-white/10" />
+              {isNearWorkbench && !shopMode && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-amber-500 text-stone-950 rounded-full font-black text-[10px] uppercase shadow-lg shadow-amber-500/20 animate-pulse">
+                  Level {workbenchLevel} active
+                </div>
+              )}
               <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 rounded-full border border-amber-500/20">
                 <span className="text-xl">🪙</span>
                 <span className="text-[14px] font-black text-amber-500">{formatAbbreviatedNumber(goldCoins)}</span>
@@ -126,7 +155,6 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
         <div className="p-6 sm:p-8 overflow-y-auto custom-scrollbar flex-1">
           {shopMode ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-12 h-full">
-              {/* BUY COLUMN */}
               <div className="flex flex-col gap-6">
                 <h3 className="text-xl font-black text-sky-400 uppercase tracking-[0.2em] border-l-4 border-sky-500 pl-4 bg-white/5 py-3 rounded-r-xl">
                   {t('buy')}
@@ -136,7 +164,6 @@ export const Crafting: React.FC<Props> = ({ inventory, playerLevel, workbenchLev
                 </div>
               </div>
               
-              {/* SELL COLUMN */}
               <div className="flex flex-col gap-6">
                 <h3 className="text-xl font-black text-emerald-400 uppercase tracking-[0.2em] border-l-4 border-emerald-500 pl-4 bg-white/5 py-3 rounded-r-xl">
                   {t('sell')}

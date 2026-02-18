@@ -127,7 +127,6 @@ const App: React.FC = () => {
       const newItem = { ...itemProto, quantity: finalQuantity, uniqueId: newUniqueId };
       inventory.push(newItem);
 
-      // Money cannot be put to quick slots
       const autoSlotTypes = ['tool', 'weapon', 'food', 'structure'];
       if (newItem.type !== 'currency' && autoSlotTypes.includes(newItem.type)) {
           const emptySlotIdx = engine.quickSlots.findIndex(slot => slot === null);
@@ -243,7 +242,6 @@ const App: React.FC = () => {
           return;
       }
 
-      // Check ingredients
       const canUpgrade = Object.entries(costConfig).every(([id, qty]) => {
           const item = engine.inventory.find(i => i.id === id);
           return item && item.quantity >= (qty as number);
@@ -251,7 +249,7 @@ const App: React.FC = () => {
 
       if (canUpgrade) {
           Object.entries(costConfig).forEach(([id, qty]) => {
-              const item = engine.inventory.find(i => id === id);
+              const item = engine.inventory.find(i => i.id === id);
               if (item) {
                   item.quantity -= (qty as number);
                   if (item.quantity <= 0) {
@@ -267,10 +265,16 @@ const App: React.FC = () => {
           addFloatingText(entity.x, entity.y, t('upgraded'), '#fbbf24');
           spawnParticles(entity.x, entity.y, 'spark', 12, '#fbbf24', 1.5);
           showMessage(t('upgraded'));
+          
+          // REFRESH SELECTION MODAL TO REFLECT NEW LEVEL
           setActiveModal('none');
+          setTimeout(() => {
+              handleInteract(entityId);
+          }, 50);
+          
           setUiState(prev => prev + 1);
       } else {
-          showMessage(t('inv_full')); // Using inv_full as a proxy for "missing resources" generically here
+          showMessage(t('inv_full'));
       }
   }, []);
 
@@ -310,7 +314,6 @@ const App: React.FC = () => {
         const { uniqueId, slotIdx } = data;
         const item = engine.inventory.find(i => i.uniqueId === uniqueId);
         if (item) {
-          // Money cannot be put to quick slots
           if (item.type === 'currency') return;
           engine.quickSlots = engine.quickSlots.map(uid => uid === uniqueId ? null : uid);
           engine.quickSlots[slotIdx] = uniqueId;
@@ -339,7 +342,6 @@ const App: React.FC = () => {
     } else if (action === 'place') {
         const { x, y, type, tile, itemUniqueId } = data;
 
-        // Tile placing logic
         if (tile) {
           const cx = Math.floor(x / CHUNK_SIZE);
           const cy = Math.floor(y / CHUNK_SIZE);
@@ -351,7 +353,6 @@ const App: React.FC = () => {
             SoundManager.play('build');
             showMessage(t('placed') + " " + t(tile));
             
-            // Consume item
             const item = engine.inventory.find(i => i.uniqueId === itemUniqueId);
             if (item) {
               item.quantity--;
@@ -365,7 +366,6 @@ const App: React.FC = () => {
           }
         }
 
-        // Restriction check for villages
         const restrictedInVillage: EntityType[] = ['campfire', 'tent', 'hut', 'workbench'];
         if (restrictedInVillage.includes(type) && isLocationInVillage(x, y)) {
             showMessage(t('no_building_village'));
@@ -463,10 +463,11 @@ const App: React.FC = () => {
           const upgradeAvailable = STRUCTURE_UPGRADES.workbench[lvl + 1];
           const upgradeText = upgradeAvailable ? `${t('upgrade')} (Lvl ${lvl + 1})` : "Max Level";
           
+          setCurrentWorkbenchLevel(lvl);
           setSelectionMenu({
               title: "Workbench (Lvl " + lvl + ")",
               options: [
-                  { label: t('crafting'), icon: '⚒️', action: () => { setCurrentWorkbenchLevel(lvl); setActiveModal('crafting'); } },
+                  { label: t('crafting'), icon: '⚒️', action: () => { setActiveModal('crafting'); } },
                   { label: upgradeText, icon: '⬆️', disabled: !upgradeAvailable, subtext: upgradeAvailable ? Object.entries(upgradeAvailable).map(([k, v]) => `${v} ${t(k)}`).join(', ') : '', action: () => handleUpgrade(entity.id) }
               ]
           });
@@ -699,6 +700,22 @@ const App: React.FC = () => {
     engine.time += dt * 5; if (engine.time >= 2400) engine.time = 0;
     engine.isDay = engine.time > 600 && engine.time < 1800;
     
+    // Workbench Proximity Detection
+    let foundWorkbench = false;
+    let wbLvl = 1;
+    for (const ent of engine.entities) {
+        if (ent.type === 'workbench') {
+            const dist = Math.sqrt((ent.x - engine.playerPos.x)**2 + (ent.y - engine.playerPos.y)**2);
+            if (dist < 2.5) {
+                foundWorkbench = true;
+                wbLvl = ent.level || 1;
+                break;
+            }
+        }
+    }
+    if (foundWorkbench !== isNearWorkbench) setIsNearWorkbench(foundWorkbench);
+    if (wbLvl !== currentWorkbenchLevel) setCurrentWorkbenchLevel(wbLvl);
+
     const nearVillage = engine.entities.some(e => (e.type === 'shopkeeper' || e.type === 'house_village') && Math.sqrt((e.x - engine.playerPos.x)**2 + (e.y - engine.playerPos.y)**2) < 15);
     if (nearVillage !== isInVillage) setIsInVillage(nearVillage);
 
@@ -757,7 +774,6 @@ const App: React.FC = () => {
           continue;
       }
       
-      // ANIMAL & VILLAGER AI
       if ((ent.type === 'deer' || ent.type === 'rabbit' || ent.type === 'villager')) {
           if (!ent.aiState) ent.aiState = 'idle';
           if (!ent.lastAiTick) ent.lastAiTick = now;
@@ -768,13 +784,10 @@ const App: React.FC = () => {
           const wanderTime = isVillager ? 6000 : 3000;
 
           if (isVillager) {
-              // VILLAGER AI LOGIC
               if (ent.aiState === 'idle') {
                 if (now - ent.lastAiTick > wanderTime + Math.random() * 5000) {
                     const r = Math.random();
-                    // Decision: Travel, Work, or Wander?
                     if (r < 0.3) {
-                        // Look for a nearby farm plot to work on
                         const plot = engine.entities.find(p => p.type === 'farm_plot' && 
                             Math.abs(p.x - ent.x) < 8 && Math.abs(p.y - ent.y) < 8 && 
                             (p.growthStage || 0) < 5);
@@ -819,12 +832,11 @@ const App: React.FC = () => {
               } else if (ent.aiState === 'working') {
                   const dx = ent.targetX! - ent.x, dy = ent.targetY! - ent.y, dist = Math.sqrt(dx*dx + dy*dy);
                   if (dist < 0.8) {
-                      // Working on the plot
                       if (Math.random() < 0.05) {
                           ent.interactionAnim = 0.5;
                           const targetPlot = engine.entities.find(p => p.id === ent.targetEntityId);
                           if (targetPlot && targetPlot.type === 'farm_plot' && targetPlot.growthTimer) {
-                              targetPlot.growthTimer -= 2000; // Speed up growth
+                              targetPlot.growthTimer -= 2000;
                               spawnParticles(targetPlot.x, targetPlot.y, 'leaf', 2, '#15803d', 0.5);
                           }
                       }
@@ -861,7 +873,6 @@ const App: React.FC = () => {
                   }
               }
           } else {
-              // ANIMAL AI LOGIC (Deer, Rabbit)
               if (ent.aiState === 'idle' && now - ent.lastAiTick > wanderTime + Math.random() * 4000) {
                   ent.aiState = 'grazing'; 
                   ent.targetX = ent.x + (Math.random() - 0.5) * 8; 
@@ -916,15 +927,12 @@ const App: React.FC = () => {
           chunk[x] = [];
           for(let y=0; y<CHUNK_SIZE; y++) {
               const wx = cx * CHUNK_SIZE + x, wy = cy * CHUNK_SIZE + y;
-              
               const isRoad = (isRoadChunkX && x >= 7 && x <= 9) || (isRoadChunkY && y >= 7 && y <= 9);
-              
               if (isVillageChunk && x > 4 && x < 12 && y > 4 && y < 12) {
                   chunk[x][y] = 'stone';
                   if (x === 8 && y === 8) gameState.current.entities.push({ id: `shop-${cx}-${cy}`, x: wx + 0.5, y: wy + 0.5, type: 'shopkeeper', health: 1000, maxHealth: 1000, level: 1 });
                   else if ((x === 6 || x === 10) && (y === 6 || y === 10)) gameState.current.entities.push({ id: `h-${cx}-${cy}-${x}-${y}`, x: wx + 0.5, y: wy + 0.5, type: 'house_village', health: 500, maxHealth: 500, level: 1 });
                   else if ((x === 6 && y === 8) || (x === 10 && y === 8)) {
-                      // Spawn village fields
                       gameState.current.entities.push({ 
                           id: `f-${cx}-${cy}-${x}-${y}`, 
                           x: wx + 0.5, 
@@ -952,14 +960,11 @@ const App: React.FC = () => {
                   }
                   continue;
               }
-
               if (isRoad) {
                   chunk[x][y] = 'road_tile';
                   continue;
               }
-
               chunk[x][y] = calculateTileType(wx, wy);
-
               if (chunk[x][y] === 'grass' && Math.random() < 0.05) {
                 const types: EntityType[] = ['tree_oak', 'flower', 'grass_clump', 'rock_standard', 'deer', 'rabbit', 'bush_berry'];
                 const t = types[Math.floor(Math.random() * types.length)];
@@ -969,7 +974,7 @@ const App: React.FC = () => {
       }
       return chunk;
   };
-  // rest of component...
+
   const startNewGame = () => {
     gameState.current.playerPos = { x: 0, y: 0 };
     gameState.current.playerStats = { ...INITIAL_STATS, character: gameState.current.playerStats.character };
@@ -982,11 +987,9 @@ const App: React.FC = () => {
     gameState.current.chunks = {};
     gameState.current.time = 800;
     gameState.current.gameStarted = true;
-    
     addItemToInventory(ITEMS.axe, 1);
     addItemToInventory(ITEMS.hoe, 1);
     addItemToInventory(ITEMS.wood, 10);
-    
     setIsDead(false); setIsResting(false); setActiveModal('none'); setGameStarted(true);
   };
 
@@ -1003,16 +1006,16 @@ const App: React.FC = () => {
     const recipe = RECIPES.find(r => r.id === recipeId);
     if (recipe) {
         const engine = gameState.current;
-        
-        // Multi-check
+        const needsWorkbench = recipe.workbenchLevelRequired !== undefined;
+        const hasWorkbenchLevel = !needsWorkbench || (isNearWorkbench && currentWorkbenchLevel >= recipe.workbenchLevelRequired);
+
         const canCraftMultiple = Object.entries(recipe.ingredients).every(([id, qty]) => {
             const item = engine.inventory.find(i => i.id === id);
             return item && item.quantity >= (qty as number) * multiple;
-        }) && (recipe.workbenchLevelRequired === undefined || currentWorkbenchLevel >= recipe.workbenchLevelRequired);
+        }) && hasWorkbenchLevel && engine.playerStats.level >= recipe.levelRequired;
 
         if (!canCraftMultiple) return false;
 
-        // Consume ingredients for all repetitions
         Object.entries(recipe.ingredients).forEach(([id, qty]) => {
             const item = engine.inventory.find(i => i.id === id);
             if (item) {
@@ -1024,10 +1027,7 @@ const App: React.FC = () => {
             }
         });
 
-        // Add output for all repetitions
         if (recipe.output.type === 'structure' && recipe.output.placeEntity) {
-            // Placing structures usually only makes sense one at a time via this UI, 
-            // but we'll honor multiple if it's somehow called.
             for (let i = 0; i < multiple; i++) {
                 handleAction('place', { x: engine.playerPos.x + 1 + (i * 0.5), y: engine.playerPos.y + 1 + (i * 0.5), type: recipe.output.placeEntity! });
             }
@@ -1113,7 +1113,7 @@ const App: React.FC = () => {
                   <Crafting 
                     inventory={gameState.current.inventory} 
                     playerLevel={gameState.current.playerStats.level} 
-                    workbenchLevel={99} // Shops don't restrict by workbench lvl
+                    workbenchLevel={99} 
                     isNearWorkbench={true}
                     onCraft={craftItem} 
                     onClose={() => setActiveModal('none')} 

@@ -230,6 +230,17 @@ export const GameCanvas: React.FC<Props> = ({ gameState, canvasRef, placingEntit
               ctx.fillRect(screenX - 20 * zoom, screenY - 50 * zoom, (ent.health / ent.maxHealth) * 40 * zoom, 4 * zoom);
             }
 
+            // LEVEL INDICATORS FOR WORKBENCH / HUT
+            if (ent.level && ent.level > 1 && (ent.type === 'workbench' || ent.type === 'hut')) {
+                ctx.fillStyle = 'white';
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 2 * zoom;
+                ctx.font = `bold ${12 * zoom}px Inter, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.strokeText(`LVL ${ent.level}`, screenX, screenY - 65 * zoom);
+                ctx.fillText(`LVL ${ent.level}`, screenX, screenY - 65 * zoom);
+            }
+
             if (ent.type === 'farm_plot' && ent.growthStage) {
                 // Ripe glow effect for stage 5
                 if (ent.growthStage === 5) {
